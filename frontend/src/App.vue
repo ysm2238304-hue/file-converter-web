@@ -25,7 +25,7 @@
           </nav>
         </div>
 
-        <!-- 右側操作按鈕：已替換為問題回報按鈕 -->
+        <!-- 右側操作按鈕：替換為問題回報按鈕 -->
         <div class="flex items-center">
           <button 
             @click="openFeedbackModal" 
@@ -256,7 +256,7 @@
               </div>
             </div>
 
-            <button @click="executeTool" :disabled="isProcessing" class="cartoon-btn w-full py-4 rounded-2xl bg-[#FF6B6B] text-white border-[3px] border-[#2C3E50] shadow-[4px_4px_0px_#2C3E50] font-black text-lg transition-all flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed">
+            <button @click="executeTool" :disabled="isProcessing" class="cartoon-btn w-full py-4 rounded-2xl bg-[#FF6B6B] text-white border-[3px] border-[#2C3E50] shadow-[4px_4px_0px_#2C3E50] font-black text-lg transition-all flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer">
               <span>{{ isProcessing ? '饅頭加熱中... ♨️' : activeToolMeta.actionText }}</span>
             </button>
 
@@ -287,7 +287,7 @@
           </a>
 
           <div class="pt-4 flex items-center justify-between text-xs font-bold text-gray-400 border-t-[2px] border-slate-100">
-            <button @click="goToHome" class="hover:text-[#FF6B6B] font-black transition-colors">
+            <button @click="goToHome" class="hover:text-[#FF6B6B] font-black transition-colors cursor-pointer">
               ← 返回處理其他文件
             </button>
             <span class="flex items-center gap-1">🔥 暫存 30 分鐘後自動銷毀</span>
@@ -415,8 +415,7 @@ const feedbackForm = ref({
   message: ''
 });
 
-// ⚠️ 請填入您的 Formspree Endpoint（前往 https://formspree.io 免費取得）
-// 範例：'https://formspree.io/f/xyzabcop'
+// 已設定為您的 Formspree Endpoint
 const FORMSPREE_ENDPOINT = 'https://formspree.io/f/xzeekqlz';
 
 const openFeedbackModal = () => {
@@ -434,6 +433,15 @@ const submitFeedback = async () => {
   isSubmittingFeedback.value = true;
   feedbackStatusMsg.value = '';
 
+  // 關鍵修正：若使用者沒有填寫 Email，就不要帶 email 屬性，避免觸發 Formspree 格式驗證報錯
+  const payload = {
+    type: feedbackForm.value.type,
+    message: feedbackForm.value.message.trim()
+  };
+  if (feedbackForm.value.email && feedbackForm.value.email.trim()) {
+    payload.email = feedbackForm.value.email.trim();
+  }
+
   try {
     const res = await fetch(FORMSPREE_ENDPOINT, {
       method: 'POST',
@@ -441,17 +449,14 @@ const submitFeedback = async () => {
         'Content-Type': 'application/json',
         'Accept': 'application/json'
       },
-      body: JSON.stringify({
-        email: feedbackForm.value.email || '使用者未留下信箱',
-        type: feedbackForm.value.type,
-        message: feedbackForm.value.message
-      })
+      body: JSON.stringify(payload)
     });
 
     if (res.ok) {
       feedbackStatusType.value = 'success';
       feedbackStatusMsg.value = '回報已寄出！作者的 Gmail 已收到通知 🥟';
       feedbackForm.value.message = '';
+      feedbackForm.value.email = '';
       setTimeout(() => {
         closeFeedbackModal();
         feedbackStatusMsg.value = '';
@@ -461,7 +466,7 @@ const submitFeedback = async () => {
     }
   } catch (err) {
     feedbackStatusType.value = 'error';
-    feedbackStatusMsg.value = '傳送失敗，請確認 Formspree 設定或稍後再試！';
+    feedbackStatusMsg.value = '傳送失敗，請確認網路連線或稍後再試！';
   } finally {
     isSubmittingFeedback.value = false;
   }

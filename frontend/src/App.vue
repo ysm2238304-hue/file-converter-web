@@ -417,7 +417,7 @@ const feedbackForm = ref({
 
 // ⚠️ 請填入您的 Formspree Endpoint（前往 https://formspree.io 免費取得）
 // 範例：'https://formspree.io/f/xyzabcop'
-const FORMSPREE_ENDPOINT = 'https://formspree.io/f/YOUR_FORM_ID';
+const FORMSPREE_ENDPOINT = 'https://formspree.io/f/xzeekqlz';
 
 const openFeedbackModal = () => {
   showFeedbackModal.value = true;

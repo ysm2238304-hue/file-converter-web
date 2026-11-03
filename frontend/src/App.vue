@@ -120,6 +120,16 @@
       <!-- ================= 視圖 2：獨立工具工作台 (Workspace) ================= -->
       <section v-else-if="currentStep === 'workspace'" class="flex-1 flex flex-col relative z-10">
         
+        <!-- 【關鍵修復】：移到工作台最外層，確保隨時存在於 DOM 中，任何時候點擊「新增檔案」都能正常呼叫 -->
+        <input 
+          type="file" 
+          ref="fileInputRef" 
+          multiple 
+          class="hidden" 
+          :accept="activeToolMeta.accept"
+          @change="handleFileInput" 
+        />
+
         <!-- 頂部次級工具列 -->
         <div class="bg-white border-b-[3px] border-[#2C3E50] py-4 px-6 flex items-center justify-between shadow-sm">
           <button @click="goToHome" class="text-sm font-black text-[#2C3E50] hover:text-[#FF6B6B] flex items-center space-x-2 bg-[#F0F4F8] px-4 py-2 rounded-xl border-[2px] border-[#2C3E50] shadow-[2px_2px_0px_#2C3E50] cartoon-btn cursor-pointer">
@@ -144,15 +154,6 @@
               isDragging ? 'border-[#FF6B6B] bg-[#FFF0F0] scale-105 shadow-[8px_8px_0px_#FF6B6B]' : 'border-[#2C3E50] shadow-[8px_8px_0px_#2C3E50]'
             ]"
           >
-            <input 
-              type="file" 
-              ref="fileInputRef" 
-              multiple 
-              class="hidden" 
-              :accept="activeToolMeta.accept"
-              @change="handleFileInput" 
-            />
-
             <div class="text-7xl animate-bounce">📂</div>
             
             <div class="space-y-3">
@@ -177,9 +178,8 @@
           <!-- ================= 左側區域 ================= -->
           <div class="lg:col-span-3 space-y-5">
             
-            <!-- 情況 A：拆分 PDF 模式（顯示全部頁面縮圖矩陣視覺化選取） -->
+            <!-- 情況 A：拆分 PDF 模式（顯示全部頁面縮圖矩陣） -->
             <div v-if="currentToolId === 'split_pdf'" class="space-y-5">
-              <!-- 文件基本資訊與快捷選取列 -->
               <div class="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-2xl border-[3px] border-[#2C3E50] shadow-[4px_4px_0px_#2C3E50]">
                 <div class="flex items-center gap-2">
                   <span class="text-sm font-black text-[#2C3E50]">
@@ -190,7 +190,6 @@
                   </span>
                 </div>
 
-                <!-- 快捷勾選按鈕組 -->
                 <div class="flex items-center gap-2">
                   <button @click="selectAllPages" class="px-2.5 py-1 text-xs font-black bg-[#F0F4F8] hover:bg-[#FECA57] border-[2px] border-[#2C3E50] rounded-lg shadow-[1px_1px_0px_#2C3E50] transition-colors cursor-pointer">全選</button>
                   <button @click="clearAllPages" class="px-2.5 py-1 text-xs font-black bg-[#F0F4F8] hover:bg-[#FF6B6B] hover:text-white border-[2px] border-[#2C3E50] rounded-lg shadow-[1px_1px_0px_#2C3E50] transition-colors cursor-pointer">清空</button>
@@ -200,7 +199,7 @@
                 </div>
               </div>
 
-              <!-- 頁面縮圖矩陣 Grid -->
+              <!-- 頁面縮圖矩陣 -->
               <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
                 <div 
                   v-for="page in splitPages" 
@@ -213,12 +212,10 @@
                       : 'border-[#2C3E50] shadow-[3px_3px_0px_#2C3E50] opacity-80 hover:opacity-100 hover:shadow-[5px_5px_0px_#2C3E50]'
                   ]"
                 >
-                  <!-- 頁碼標籤 (左上) -->
                   <div class="absolute top-2.5 left-2.5 w-7 h-7 rounded-full bg-[#FECA57] border-[2px] border-[#2C3E50] text-[#2C3E50] text-xs font-black flex items-center justify-center shadow-[1px_1px_0px_#2C3E50] z-10">
                     {{ page.pageNum }}
                   </div>
 
-                  <!-- 選取狀態勾勾 (右上) -->
                   <div 
                     v-if="selectedPages.has(page.pageNum)"
                     class="absolute top-2.5 right-2.5 w-7 h-7 rounded-full bg-[#1DD1A1] border-[2px] border-[#2C3E50] text-white text-xs font-black flex items-center justify-center shadow-[1px_1px_0px_#2C3E50] z-10 animate-bounce"
@@ -226,7 +223,6 @@
                     ✓
                   </div>
 
-                  <!-- 頁面縮圖顯示 -->
                   <div class="flex-1 flex items-center justify-center overflow-hidden rounded-xl border-[2px] border-slate-200 bg-[#F9FAFB] my-1 p-1">
                     <img 
                       v-if="page.thumbnail" 
@@ -239,7 +235,6 @@
                     </div>
                   </div>
 
-                  <!-- 底部提示文字 -->
                   <div class="text-center text-[11px] font-black" :class="selectedPages.has(page.pageNum) ? 'text-[#FF6B6B]' : 'text-gray-400'">
                     {{ selectedPages.has(page.pageNum) ? '已選取' : '點擊加入' }}
                   </div>
@@ -264,12 +259,10 @@
                   :key="item.id"
                   class="group bg-white rounded-2xl border-[3px] border-[#2C3E50] shadow-[4px_4px_0px_#2C3E50] p-3 relative flex flex-col justify-between aspect-[3/4] hover:-translate-y-1 transition-transform"
                 >
-                  <!-- 順序標籤 -->
                   <div class="absolute top-3 left-3 w-7 h-7 rounded-full bg-[#FECA57] border-[2px] border-[#2C3E50] text-[#2C3E50] text-xs font-black flex items-center justify-center shadow-[1px_1px_0px_#2C3E50] z-10">
                     {{ index + 1 }}
                   </div>
 
-                  <!-- 刪除按鈕 -->
                   <button 
                     @click="removeFile(index)"
                     class="absolute top-3 right-3 w-7 h-7 rounded-full bg-white border-[2px] border-[#2C3E50] text-[#2C3E50] hover:bg-[#FF6B6B] hover:text-white flex items-center justify-center text-xs transition-colors shadow-[1px_1px_0px_#2C3E50] z-10 cursor-pointer"
@@ -277,7 +270,6 @@
                     ✕
                   </button>
 
-                  <!-- 封面縮圖預覽 -->
                   <div class="flex-1 flex flex-col items-center justify-center pt-2 overflow-hidden">
                     <div class="w-20 h-28 bg-[#F0F4F8] border-[2px] border-[#2C3E50] rounded-xl flex items-center justify-center shadow-[2px_2px_0px_#2C3E50] overflow-hidden p-1">
                       <img 
@@ -299,7 +291,6 @@
                     </p>
                   </div>
 
-                  <!-- 排序控制箭頭 -->
                   <div class="flex items-center justify-center space-x-3 pt-2 border-t-[2px] border-slate-100 mt-2">
                     <button :disabled="index === 0" @click="moveFile(index, -1)" class="p-1 text-sm text-[#2C3E50] hover:text-[#FF6B6B] disabled:opacity-20 font-black cursor-pointer">◀</button>
                     <span class="text-[10px] text-slate-300 font-black tracking-widest">順序</span>
@@ -404,7 +395,6 @@
     >
       <div class="bg-white w-full max-w-md rounded-[2rem] border-[4px] border-[#2C3E50] shadow-[8px_8px_0px_#2C3E50] p-6 sm:p-8 space-y-5 relative select-none">
         
-        <!-- 右上角關閉按鈕 -->
         <button 
           @click="closeFeedbackModal"
           class="absolute top-5 right-5 w-8 h-8 rounded-full bg-white border-[2px] border-[#2C3E50] text-[#2C3E50] hover:bg-[#FF6B6B] hover:text-white flex items-center justify-center text-sm font-black transition-colors shadow-[2px_2px_0px_#2C3E50] cursor-pointer"
@@ -412,7 +402,6 @@
           ✕
         </button>
 
-        <!-- 彈窗標題 -->
         <div class="space-y-1">
           <div class="flex items-center gap-2">
             <span class="text-2xl">📮</span>
@@ -421,7 +410,6 @@
           <p class="text-xs font-bold text-gray-400">有任何 Bug 或轉檔問題？送出後會直接寄到作者信箱！</p>
         </div>
 
-        <!-- 回報表單 -->
         <form @submit.prevent="submitFeedback" class="space-y-4 pt-1">
           <div class="space-y-1">
             <label class="text-xs font-black text-[#2C3E50] block">您的 Email <span class="text-gray-400 font-bold">(選填，若需回覆請填)</span></label>
@@ -484,7 +472,7 @@
 import { ref, computed, h } from 'vue';
 import * as pdfjsLib from 'pdfjs-dist';
 
-// 指定 PDF.js worker 路徑 (採用官方 CDN，保證打包零報錯)
+// 指定 PDF.js worker 路徑
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
 // 狀態控制
@@ -502,8 +490,8 @@ const downloadUrl = ref('');
 const downloadFilename = ref('');
 
 // ================= 拆分預覽與頁面選取狀態 =================
-const splitPages = ref([]);            // 儲存拆分文件的每一頁縮圖 [{ pageNum, thumbnail }]
-const selectedPages = ref(new Set());  // 儲存被使用者選取的頁碼
+const splitPages = ref([]);
+const selectedPages = ref(new Set());
 const isRenderingPages = ref(false);
 
 const splitParams = ref({
@@ -580,7 +568,6 @@ const submitFeedback = async () => {
 };
 
 // ================= PDF.js 本機渲染工具函式 =================
-// 渲染特定頁面為 Base64 縮圖 (寬度設為 160px 既清晰又節省瀏覽器記憶體)
 const renderPageThumbnail = async (pdfDoc, pageNum, targetWidth = 160) => {
   try {
     const page = await pdfDoc.getPage(pageNum);
@@ -601,7 +588,6 @@ const renderPageThumbnail = async (pdfDoc, pageNum, targetWidth = 160) => {
   }
 };
 
-// 輔助函式：數字陣列轉為頁碼範圍字串 (如 [1, 2, 3, 5] -> "1-3, 5")
 const numbersToRanges = (arr) => {
   if (!arr || arr.length === 0) return '';
   const sorted = [...new Set(arr)].sort((a, b) => a - b);
@@ -622,7 +608,6 @@ const numbersToRanges = (arr) => {
   return ranges.join(', ');
 };
 
-// 輔助函式：範圍字串解析回數字集合 (如 "1-3, 5" -> [1, 2, 3, 5])
 const rangesToNumbers = (str, maxPages) => {
   const pages = new Set();
   const parts = str.split(',').map(s => s.trim()).filter(Boolean);
@@ -642,7 +627,6 @@ const rangesToNumbers = (str, maxPages) => {
   return pages;
 };
 
-// 切換單頁勾選狀態
 const togglePageSelection = (pageNum) => {
   if (selectedPages.value.has(pageNum)) {
     selectedPages.value.delete(pageNum);
@@ -653,7 +637,6 @@ const togglePageSelection = (pageNum) => {
   splitParams.value.rangesStr = numbersToRanges(Array.from(selectedPages.value));
 };
 
-// 拆分快捷操作
 const selectAllPages = () => {
   selectedPages.value = new Set(splitPages.value.map(p => p.pageNum));
   splitParams.value.rangesStr = numbersToRanges(Array.from(selectedPages.value));
@@ -671,7 +654,6 @@ const selectEvenPages = () => {
   splitParams.value.rangesStr = numbersToRanges(Array.from(selectedPages.value));
 };
 
-// 當使用者手動在文字框輸入範圍時，雙向反選勾勾
 const onRangesInput = () => {
   if (splitPages.value.length > 0) {
     selectedPages.value = rangesToNumbers(splitParams.value.rangesStr, splitPages.value.length);
@@ -692,12 +674,10 @@ const appendFiles = async (fileList) => {
       thumbnail: null
     };
 
-    // 若是圖片直接建立本地預覽
     if (f.type.startsWith('image/')) {
       item.thumbnail = URL.createObjectURL(f);
     }
 
-    // 若是 PDF，利用 pdf.js 生成第 1 頁封面縮圖
     if (ext === 'pdf') {
       try {
         const arrayBuffer = await f.arrayBuffer();
@@ -705,20 +685,17 @@ const appendFiles = async (fileList) => {
         item.pages = pdfDoc.numPages;
         item.thumbnail = await renderPageThumbnail(pdfDoc, 1, 160);
 
-        // 如果當前是「拆分 PDF」，依序讀取所有頁面的縮圖
         if (currentToolId.value === 'split_pdf') {
-          files.value = [item]; // 拆分一次處理單一檔案
+          files.value = [item];
           splitPages.value = [];
-          selectedPages.value = new Set([1]); // 預設選取第 1 頁
+          selectedPages.value = new Set([1]);
           splitParams.value.rangesStr = '1';
           isRenderingPages.value = true;
 
-          // 先建立佔位
           for (let i = 1; i <= pdfDoc.numPages; i++) {
             splitPages.value.push({ pageNum: i, thumbnail: null });
           }
 
-          // 非同步循序生成各頁縮圖 (保持平滑不卡頓)
           (async () => {
             for (let i = 1; i <= pdfDoc.numPages; i++) {
               const thumb = await renderPageThumbnail(pdfDoc, i, 160);
@@ -933,7 +910,11 @@ const clearWorkspace = () => {
   selectedPages.value.clear();
 };
 
-const triggerFileInput = () => fileInputRef.value.click();
+const triggerFileInput = () => {
+  if (fileInputRef.value) {
+    fileInputRef.value.click();
+  }
+};
 
 const handleFileInput = (e) => {
   appendFiles(e.target.files);

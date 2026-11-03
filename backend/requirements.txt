@@ -5,3 +5,4 @@ pymupdf
 docx2pdf
 pdf2docx
 aiofiles
+Pillow

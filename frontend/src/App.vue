@@ -25,18 +25,20 @@
           </nav>
         </div>
 
-        <!-- 右側操作按鈕 -->
-        <div class="flex items-center space-x-5">
-          <button class="text-[15px] font-black text-[#2C3E50] hover:text-[#FF6B6B] hidden sm:block">登錄</button>
-          <button class="cartoon-btn px-6 py-2.5 rounded-xl bg-[#FECA57] border-[3px] border-[#2C3E50] shadow-[4px_4px_0px_#2C3E50] text-[#2C3E50] text-[15px] font-black">
-            免費註冊
+        <!-- 右側操作按鈕：已替換為問題回報按鈕 -->
+        <div class="flex items-center">
+          <button 
+            @click="openFeedbackModal" 
+            class="cartoon-btn px-5 py-2 sm:px-6 sm:py-2.5 rounded-xl bg-[#FECA57] border-[3px] border-[#2C3E50] shadow-[4px_4px_0px_#2C3E50] text-[#2C3E50] text-sm sm:text-[15px] font-black flex items-center gap-1.5 cursor-pointer"
+          >
+            <span>💬</span>
+            <span>問題回報</span>
           </button>
         </div>
       </div>
     </header>
 
     <!-- ================= 2. 主內容區域 ================= -->
-    <!-- 加上 w-full 跟 flex-1 讓內容確實填滿 -->
     <main class="flex-1 flex flex-col relative w-full overflow-hidden">
       
       <!-- 背景裝飾漂浮物 -->
@@ -55,7 +57,6 @@
             </span>
             🥟
           </h1>
-          <!-- 把原本的魔法棒換成星星，避免出現小方塊 -->
           <p class="text-base sm:text-lg font-bold text-gray-500 leading-relaxed max-w-2xl mx-auto pt-2">
             完全免費、超直覺！把你搞不定的 PDF 檔案交給我們，就像吃饅頭一樣簡單又快速 ✨
           </p>
@@ -296,7 +297,88 @@
 
     </main>
 
-    <!-- 頁尾：移除白底，讓點點背景透出來，並且把文字留著 -->
+    <!-- ================= 3. 問題回報彈窗 (直寄 Gmail) ================= -->
+    <div 
+      v-if="showFeedbackModal" 
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs"
+      @click.self="closeFeedbackModal"
+    >
+      <div class="bg-white w-full max-w-md rounded-[2rem] border-[4px] border-[#2C3E50] shadow-[8px_8px_0px_#2C3E50] p-6 sm:p-8 space-y-5 relative select-none">
+        
+        <!-- 右上角關閉按鈕 -->
+        <button 
+          @click="closeFeedbackModal"
+          class="absolute top-5 right-5 w-8 h-8 rounded-full bg-white border-[2px] border-[#2C3E50] text-[#2C3E50] hover:bg-[#FF6B6B] hover:text-white flex items-center justify-center text-sm font-black transition-colors shadow-[2px_2px_0px_#2C3E50] cursor-pointer"
+        >
+          ✕
+        </button>
+
+        <!-- 彈窗標題 -->
+        <div class="space-y-1">
+          <div class="flex items-center gap-2">
+            <span class="text-2xl">📮</span>
+            <h3 class="text-2xl font-black text-[#2C3E50]">問題回報與建議</h3>
+          </div>
+          <p class="text-xs font-bold text-gray-400">有任何 Bug 或轉檔問題？送出後會直接寄到作者信箱！</p>
+        </div>
+
+        <!-- 回報表單 -->
+        <form @submit.prevent="submitFeedback" class="space-y-4 pt-1">
+          <!-- 聯絡 Email -->
+          <div class="space-y-1">
+            <label class="text-xs font-black text-[#2C3E50] block">您的 Email <span class="text-gray-400 font-bold">(選填，若需回覆請填)</span></label>
+            <input 
+              v-model="feedbackForm.email"
+              type="email" 
+              placeholder="example@gmail.com"
+              class="w-full px-3.5 py-2 text-sm font-bold bg-[#F0F4F8] border-[2px] border-[#2C3E50] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#FECA57] shadow-[inset_2px_2px_0px_rgba(0,0,0,0.05)]"
+            />
+          </div>
+
+          <!-- 問題分類 -->
+          <div class="space-y-1">
+            <label class="text-xs font-black text-[#2C3E50] block">問題類型</label>
+            <select 
+              v-model="feedbackForm.type"
+              class="w-full px-3.5 py-2 text-sm font-bold bg-[#F0F4F8] border-[2px] border-[#2C3E50] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#FECA57] shadow-[inset_2px_2px_0px_rgba(0,0,0,0.05)]"
+            >
+              <option value="轉檔失敗">❌ 轉檔失敗 / 報錯</option>
+              <option value="格式排版跑掉">📑 格式排版跑掉</option>
+              <option value="功能建議">💡 新功能建議</option>
+              <option value="其他">💬 其他問題</option>
+            </select>
+          </div>
+
+          <!-- 問題描述 -->
+          <div class="space-y-1">
+            <label class="text-xs font-black text-[#2C3E50] block">詳細說明 <span class="text-[#FF6B6B]">*</span></label>
+            <textarea 
+              v-model="feedbackForm.message"
+              required
+              rows="3"
+              placeholder="請簡單描述狀況（例如：轉 Word 時排版跑掉、上傳某個檔案時卡住...）"
+              class="w-full px-3.5 py-2 text-sm font-bold bg-[#F0F4F8] border-[2px] border-[#2C3E50] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#FECA57] shadow-[inset_2px_2px_0px_rgba(0,0,0,0.05)] resize-none"
+            ></textarea>
+          </div>
+
+          <!-- 送出按鈕 -->
+          <button 
+            type="submit" 
+            :disabled="isSubmittingFeedback"
+            class="cartoon-btn w-full py-3.5 rounded-xl bg-[#1DD1A1] text-white border-[3px] border-[#2C3E50] shadow-[3px_3px_0px_#2C3E50] font-black text-base transition-all flex items-center justify-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+          >
+            <span>{{ isSubmittingFeedback ? '正在把信件送出... ✉️' : '確認送出 🚀' }}</span>
+          </button>
+
+          <!-- 狀態提示訊息 -->
+          <p v-if="feedbackStatusMsg" :class="['text-xs text-center font-black pt-1', feedbackStatusType === 'success' ? 'text-[#1DD1A1]' : 'text-[#FF6B6B]']">
+            {{ feedbackStatusMsg }}
+          </p>
+        </form>
+      </div>
+    </div>
+
+    <!-- 頁尾 -->
     <footer class="py-8 text-center text-sm font-black text-gray-400 relative z-10">
       © 黑糖饅頭很好吃 · 100% 免費且易於使用的線上 PDF 工具 🥟
     </footer>
@@ -320,6 +402,70 @@ const progress = ref(0);
 const progressText = ref('');
 const downloadUrl = ref('');
 const downloadFilename = ref('');
+
+// ================= 問題回報彈窗狀態 =================
+const showFeedbackModal = ref(false);
+const isSubmittingFeedback = ref(false);
+const feedbackStatusMsg = ref('');
+const feedbackStatusType = ref('success');
+
+const feedbackForm = ref({
+  email: '',
+  type: '轉檔失敗',
+  message: ''
+});
+
+// ⚠️ 請填入您的 Formspree Endpoint（前往 https://formspree.io 免費取得）
+// 範例：'https://formspree.io/f/xyzabcop'
+const FORMSPREE_ENDPOINT = 'https://formspree.io/f/YOUR_FORM_ID';
+
+const openFeedbackModal = () => {
+  showFeedbackModal.value = true;
+  feedbackStatusMsg.value = '';
+};
+
+const closeFeedbackModal = () => {
+  showFeedbackModal.value = false;
+};
+
+const submitFeedback = async () => {
+  if (!feedbackForm.value.message.trim()) return;
+
+  isSubmittingFeedback.value = true;
+  feedbackStatusMsg.value = '';
+
+  try {
+    const res = await fetch(FORMSPREE_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        email: feedbackForm.value.email || '使用者未留下信箱',
+        type: feedbackForm.value.type,
+        message: feedbackForm.value.message
+      })
+    });
+
+    if (res.ok) {
+      feedbackStatusType.value = 'success';
+      feedbackStatusMsg.value = '回報已寄出！作者的 Gmail 已收到通知 🥟';
+      feedbackForm.value.message = '';
+      setTimeout(() => {
+        closeFeedbackModal();
+        feedbackStatusMsg.value = '';
+      }, 1800);
+    } else {
+      throw new Error('傳送失敗');
+    }
+  } catch (err) {
+    feedbackStatusType.value = 'error';
+    feedbackStatusMsg.value = '傳送失敗，請確認 Formspree 設定或稍後再試！';
+  } finally {
+    isSubmittingFeedback.value = false;
+  }
+};
 
 const splitParams = ref({
   mode: 'all_single',
@@ -618,7 +764,6 @@ const executeTool = async () => {
   font-family: 'Nunito', 'Noto Sans TC', sans-serif;
 }
 
-/* 確保 html 和 body 滿版，讓點點背景可以完整覆蓋 */
 html, body {
   margin: 0;
   padding: 0;

@@ -6,7 +6,14 @@ import zipfile
 from typing import List, Optional
 
 import fitz  # PyMuPDF
-from PIL import Image
+from PIL import Image, ImageOps
+try:
+    import pillow_heif
+    pillow_heif.register_heif_opener()
+    HEIF_SUPPORTED = True
+except ImportError:
+    HEIF_SUPPORTED = False
+
 from fastapi import FastAPI, UploadFile, File, Form, BackgroundTasks, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,7 +25,7 @@ from app.services.pdf_engine import (
 )
 from app.services.office_engine import pdf_to_word_converter, word_to_pdf_libreoffice
 
-app = FastAPI(title="DocuMorph API", version="2.1")
+app = FastAPI(title="DocuMorph API", version="2.2")
 
 app.add_middleware(
     CORSMiddleware,
@@ -31,8 +38,12 @@ app.add_middleware(
 BASE_UPLOAD_DIR = os.path.abspath("tasks")
 os.makedirs(BASE_UPLOAD_DIR, exist_ok=True)
 
+# 照片批次處理安全上限 (保護 Render 記憶體與避免逾時)
+MAX_IMAGE_BATCH_COUNT = 20
+MAX_IMAGE_BATCH_BYTES = 50 * 1024 * 1024  # 50 MB
 
-# ======================== 極限畫質壓縮核心函式 ========================
+
+# ======================== 極限畫質壓縮與轉檔核心函式 ========================
 def _render_and_compress_pdf(src_doc, output_path: str, dpi: int, quality: int, keep_color: bool):
     """使用 PyMuPDF 渲染頁面並交由 Pillow 進行 4:2:0 JPEG 極限壓縮"""
     new_doc = fitz.open()
@@ -101,7 +112,6 @@ def compress_pdf_extreme(
     if preset in preset_map:
         profiles = preset_map[preset]
     else:
-        # auto 模式：遞減畫質階梯逼近目標大小
         profiles = [
             {"dpi": 95, "quality": 30},
             {"dpi": 80, "quality": 20},
@@ -126,6 +136,18 @@ def compress_pdf_extreme(
         src_doc.close()
 
 
+def _prepare_rgb_image(img: Image.Image) -> Image.Image:
+    """修正手機 EXIF 旋轉方向並統一轉為 RGB 模式"""
+    img = ImageOps.exif_transpose(img)
+    if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
+        alpha = img.convert("RGBA")
+        bg = Image.new("RGBA", alpha.size, (255, 255, 255))
+        img = Image.alpha_composite(bg, alpha).convert("RGB")
+    elif img.mode != "RGB":
+        img = img.convert("RGB")
+    return img
+
+
 def compress_single_image(
     input_path: str,
     output_dir: str,
@@ -133,20 +155,14 @@ def compress_single_image(
     quality: int = 25,
     out_format: str = "JPEG",
 ) -> str:
-    """將單張照片縮放並以高壓縮率輸出為 JPEG 或 WebP"""
+    """將單張照片（含 HEIC）縮放並以高壓縮率輸出為 JPEG 或 WebP"""
     max_dim = max(300, min(4000, int(max_dimension)))
     q = max(5, min(95, int(quality)))
     file_name = os.path.basename(input_path)
     base, _ = os.path.splitext(file_name)
 
-    with Image.open(input_path) as img:
-        if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
-            alpha = img.convert("RGBA")
-            bg = Image.new("RGBA", alpha.size, (255, 255, 255))
-            img = Image.alpha_composite(bg, alpha).convert("RGB")
-        elif img.mode != "RGB":
-            img = img.convert("RGB")
-
+    with Image.open(input_path) as raw_img:
+        img = _prepare_rgb_image(raw_img)
         w, h = img.size
         max_side = max(w, h)
         if max_side > max_dim:
@@ -166,6 +182,31 @@ def compress_single_image(
                 progressive=True,
                 subsampling=2,
             )
+        img.close()
+
+    return out_path
+
+
+def convert_heic_to_jpg(input_path: str, output_dir: str, quality: int = 92) -> str:
+    """將單張 HEIC/HEIF 照片轉正方向並快速轉存為高畫質 JPG"""
+    if not HEIF_SUPPORTED:
+        raise RuntimeError("伺服器尚未安裝 pillow-heif，無法讀取 HEIC 檔案")
+
+    q = max(50, min(100, int(quality)))
+    file_name = os.path.basename(input_path)
+    base, _ = os.path.splitext(file_name)
+    out_path = os.path.join(output_dir, f"{base}.jpg")
+
+    with Image.open(input_path) as raw_img:
+        img = _prepare_rgb_image(raw_img)
+        img.save(
+            out_path,
+            format="JPEG",
+            quality=q,
+            optimize=True,
+            progressive=True,
+        )
+        img.close()
 
     return out_path
 
@@ -202,12 +243,20 @@ async def execute_conversion(
     dpi: Optional[int] = Form(75),
     quality: Optional[int] = Form(20),
     keep_color: Optional[bool] = Form(True),
-    # 照片批次極限壓縮參數
+    # 照片批次壓縮 & HEIC 轉檔參數
     max_dimension: Optional[int] = Form(1024),
     out_format: Optional[str] = Form("JPEG"),
+    heic_quality: Optional[int] = Form(92),
 ):
     """核心轉檔與壓縮端點"""
     background_tasks.add_task(clean_expired_tasks, BASE_UPLOAD_DIR)
+
+    is_image_batch = mode in ("compress_images", "heic_to_jpg")
+    if is_image_batch and len(files) > MAX_IMAGE_BATCH_COUNT:
+        raise HTTPException(
+            status_code=400,
+            detail=f"單次最多僅支援上傳 {MAX_IMAGE_BATCH_COUNT} 張照片，請分批處理",
+        )
 
     task_id = uuid.uuid4().hex
     task_dir = os.path.join(BASE_UPLOAD_DIR, task_id)
@@ -217,11 +266,19 @@ async def execute_conversion(
     os.makedirs(output_dir, exist_ok=True)
 
     saved_files = []
+    total_bytes = 0
     for f in files:
         safe_name = sanitize_filename(f.filename)
         dest_path = os.path.join(input_dir, safe_name)
         with open(dest_path, "wb") as buf:
             shutil.copyfileobj(f.file, buf)
+        total_bytes += os.path.getsize(dest_path)
+        if is_image_batch and total_bytes > MAX_IMAGE_BATCH_BYTES:
+            shutil.rmtree(task_dir, ignore_errors=True)
+            raise HTTPException(
+                status_code=400,
+                detail="單次上傳照片總大小不可超過 50 MB，請分批處理",
+            )
         saved_files.append(dest_path)
 
     output_files = []
@@ -265,6 +322,11 @@ async def execute_conversion(
                     out_format=out_format,
                 )
                 output_files.append(out_img)
+
+        elif mode == "heic_to_jpg":
+            for f in saved_files:
+                out_jpg = convert_heic_to_jpg(f, output_dir, quality=heic_quality)
+                output_files.append(out_jpg)
 
         elif mode == "pdf_to_jpg":
             for f in saved_files:

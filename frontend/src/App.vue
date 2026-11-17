@@ -20,8 +20,9 @@
           <nav class="hidden md:flex items-center space-x-6 text-[15px] font-black text-[#2C3E50]">
             <button @click="selectTool('merge_pdf')" class="hover:text-[#FF6B6B] transition-colors cursor-pointer">合併PDF</button>
             <button @click="selectTool('split_pdf')" class="hover:text-[#FF6B6B] transition-colors cursor-pointer">拆分PDF</button>
-            <button @click="selectTool('pdf_to_word')" class="hover:text-[#FF6B6B] transition-colors cursor-pointer">PDF 轉換 ▾</button>
-            <button @click="goToHome" class="hover:text-[#FF6B6B] transition-colors cursor-pointer">所有 PDF 工具 ▾</button>
+            <button @click="selectTool('compress_pdf')" class="hover:text-[#FF6B6B] transition-colors cursor-pointer">壓縮PDF</button>
+            <button @click="selectTool('compress_images')" class="hover:text-[#FF6B6B] transition-colors cursor-pointer">照片壓縮</button>
+            <button @click="goToHome" class="hover:text-[#FF6B6B] transition-colors cursor-pointer">所有工具 ▾</button>
           </nav>
         </div>
 
@@ -45,7 +46,7 @@
       <div class="absolute top-20 left-10 text-5xl animate-bounce hidden lg:block opacity-50 z-0">✨</div>
       <div class="absolute top-40 right-20 text-6xl animate-pulse hidden lg:block opacity-50 z-0">🚀</div>
 
-      <!-- ================= 視圖 1：首頁 6 欄矩陣大廳 ================= -->
+      <!-- ================= 視圖 1：首頁工具大廳 ================= -->
       <section v-if="currentStep === 'hub'" class="max-w-[1440px] mx-auto px-4 sm:px-8 py-10 w-full space-y-10 relative z-10">
         
         <!-- 標題區域 -->
@@ -58,7 +59,7 @@
             🥟
           </h1>
           <p class="text-base sm:text-lg font-bold text-gray-500 leading-relaxed max-w-2xl mx-auto pt-2">
-            完全免費、超直覺！把你搞不定的 PDF 檔案交給我們，就像吃饅頭一樣簡單又快速 ✨
+            完全免費、超直覺！把你搞不定的 PDF 與照片檔案交給我們，就像吃饅頭一樣簡單又快速 ✨
           </p>
         </div>
 
@@ -79,31 +80,19 @@
           </button>
         </div>
 
-        <!-- 6 欄式卡通卡片網格 -->
-        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-5 pt-4">
+        <!-- 卡通卡片網格 -->
+        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6 pt-4 max-w-6xl mx-auto">
           <div 
             v-for="tool in filteredTools" 
             :key="tool.id"
-            @click="onCardClick(tool)"
-            :class="[
-              'group bg-white rounded-3xl border-[3px] border-[#2C3E50] p-4 flex flex-col justify-between transition-all duration-200 relative select-none',
-              tool.enabled 
-                ? 'cartoon-card shadow-[5px_5px_0px_#2C3E50] cursor-pointer hover:bg-[#FFF9E6]' 
-                : 'opacity-70 cursor-not-allowed shadow-[3px_3px_0px_#A0AAB5] border-[#A0AAB5]'
-            ]"
+            @click="selectTool(tool.id)"
+            class="group bg-white rounded-3xl border-[3px] border-[#2C3E50] p-5 flex flex-col justify-between transition-all duration-200 relative select-none cartoon-card shadow-[5px_5px_0px_#2C3E50] cursor-pointer hover:bg-[#FFF9E6]"
           >
-            <!-- 即將推出角標 -->
-            <div v-if="!tool.enabled" class="absolute -top-3 -right-3 bg-[#FECA57] border-[2px] border-[#2C3E50] text-[10px] font-black px-2 py-1 rounded-full rotate-12 shadow-[2px_2px_0px_#2C3E50] z-10">
-              即將推出 🚧
-            </div>
-
-            <!-- 頂部 App 圖章圖示 -->
             <div class="space-y-4">
               <div :class="['w-12 h-12 rounded-2xl flex items-center justify-center text-white border-[3px] border-[#2C3E50] shadow-[2px_2px_0px_#2C3E50] transition-transform group-hover:scale-110 group-hover:-rotate-6', tool.iconBg]">
                 <component :is="tool.iconSvg" />
               </div>
 
-              <!-- 卡片標題與描述 -->
               <div class="space-y-1.5">
                 <h3 class="text-base font-black text-[#2C3E50] leading-snug">
                   {{ tool.title }}
@@ -120,7 +109,6 @@
       <!-- ================= 視圖 2：獨立工具工作台 (Workspace) ================= -->
       <section v-else-if="currentStep === 'workspace'" class="flex-1 flex flex-col relative z-10">
         
-        <!-- 【關鍵修復】：移到工作台最外層，確保隨時存在於 DOM 中，任何時候點擊「新增檔案」都能正常呼叫 -->
         <input 
           type="file" 
           ref="fileInputRef" 
@@ -242,11 +230,11 @@
               </div>
             </div>
 
-            <!-- 情況 B：合併 PDF 與其他功能（文件列表 + 封面第 1 頁縮圖） -->
+            <!-- 情況 B：其他功能（檔案列表 + 封面第 1 頁或照片縮圖） -->
             <div v-else class="space-y-5">
               <div class="flex items-center justify-between bg-white p-4 rounded-2xl border-[3px] border-[#2C3E50] shadow-[4px_4px_0px_#2C3E50]">
                 <span class="text-sm font-black text-[#2C3E50]">
-                  已選取 {{ files.length }} 個檔案（可按箭頭調換合併順序）
+                  已選取 {{ files.length }} 個檔案
                 </span>
                 <button @click="triggerFileInput" class="text-sm font-black text-[#FF6B6B] hover:underline bg-[#FFF0F0] px-3 py-1 rounded-lg border-[2px] border-[#FF6B6B] cursor-pointer">
                   ➕ 新增檔案
@@ -302,14 +290,14 @@
 
           </div>
 
-          <!-- ================= 右側控制面版 ================= -->
+          <!-- ================= 右側控制面板 ================= -->
           <div class="lg:col-span-1 bg-white p-6 rounded-[2rem] border-[3px] border-[#2C3E50] shadow-[6px_6px_0px_#2C3E50] space-y-6 sticky top-24">
             <div class="space-y-1">
               <h3 class="text-xl font-black text-[#2C3E50]">{{ activeToolMeta.title }}</h3>
               <p class="text-xs font-bold text-gray-400">配置你的專屬饅頭配方 ⚙️</p>
             </div>
 
-            <!-- 拆分設定選項 -->
+            <!-- 1. 拆分 PDF 設定選項 -->
             <div v-if="currentToolId === 'split_pdf'" class="space-y-4 pt-4 border-t-[2px] border-slate-100">
               <label class="text-sm font-black text-[#2C3E50] block">分割模式</label>
               <div class="space-y-3 text-sm font-bold text-gray-600">
@@ -333,6 +321,106 @@
                   <p class="text-[11px] font-bold text-gray-400">已勾選 {{ selectedPages.size }} 頁，輸入範圍會自動連動！</p>
                 </div>
               </div>
+            </div>
+
+            <!-- 2. PDF 極限壓縮設定選項 -->
+            <div v-else-if="currentToolId === 'compress_pdf'" class="space-y-4 pt-4 border-t-[2px] border-slate-100">
+              <div class="space-y-1.5">
+                <label class="text-xs font-black text-[#2C3E50] block">壓縮強度預設</label>
+                <select 
+                  v-model="compressPdfParams.preset"
+                  class="w-full px-3 py-2 text-sm font-bold bg-[#F0F4F8] border-[2px] border-[#2C3E50] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#48DBFB]"
+                >
+                  <option value="auto">🔥 自動逼近目標大小 (推薦)</option>
+                  <option value="extreme">💀 毀滅級畫質 (60 DPI / 畫質 12)</option>
+                  <option value="strong">⚡ 強力壓縮 (75 DPI / 畫質 20)</option>
+                  <option value="medium">⚖️ 平衡壓縮 (95 DPI / 畫質 30)</option>
+                  <option value="custom">🛠️ 手動自訂 DPI 與畫質</option>
+                </select>
+              </div>
+
+              <div v-if="compressPdfParams.preset === 'auto'" class="space-y-1.5">
+                <label class="text-xs font-black text-[#2C3E50] block">目標檔案上限 (MB)</label>
+                <input 
+                  v-model.number="compressPdfParams.targetMb"
+                  type="number"
+                  min="0.5"
+                  max="500"
+                  step="0.5"
+                  class="w-full px-3 py-2 text-sm font-bold bg-[#F0F4F8] border-[2px] border-[#2C3E50] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#48DBFB]"
+                />
+              </div>
+
+              <div v-if="compressPdfParams.preset === 'custom'" class="grid grid-cols-2 gap-3">
+                <div class="space-y-1">
+                  <label class="text-xs font-black text-[#2C3E50] block">解析度 (DPI)</label>
+                  <input 
+                    v-model.number="compressPdfParams.dpi"
+                    type="number"
+                    min="40"
+                    max="200"
+                    class="w-full px-3 py-2 text-sm font-bold bg-[#F0F4F8] border-[2px] border-[#2C3E50] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#48DBFB]"
+                  />
+                </div>
+                <div class="space-y-1">
+                  <label class="text-xs font-black text-[#2C3E50] block">畫質 (5~95)</label>
+                  <input 
+                    v-model.number="compressPdfParams.quality"
+                    type="number"
+                    min="5"
+                    max="95"
+                    class="w-full px-3 py-2 text-sm font-bold bg-[#F0F4F8] border-[2px] border-[#2C3E50] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#48DBFB]"
+                  />
+                </div>
+              </div>
+
+              <label class="flex items-start space-x-2.5 cursor-pointer text-xs font-bold text-gray-600 pt-1">
+                <input 
+                  type="checkbox" 
+                  v-model="compressPdfParams.keepColor"
+                  class="mt-0.5 w-4 h-4 text-[#FF6B6B] rounded border-[#2C3E50]"
+                />
+                <span>保留原始彩色（取消則轉為柔和灰階，體積更小）</span>
+              </label>
+            </div>
+
+            <!-- 3. 照片批次極限壓縮設定選項 -->
+            <div v-else-if="currentToolId === 'compress_images'" class="space-y-4 pt-4 border-t-[2px] border-slate-100">
+              <div class="space-y-1.5">
+                <label class="text-xs font-black text-[#2C3E50] block">最大長邊限制 (px)</label>
+                <input 
+                  v-model.number="compressImgParams.maxDimension"
+                  type="number"
+                  min="300"
+                  max="4000"
+                  step="64"
+                  class="w-full px-3 py-2 text-sm font-bold bg-[#F0F4F8] border-[2px] border-[#2C3E50] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#10AC84]"
+                />
+              </div>
+
+              <div class="grid grid-cols-2 gap-3">
+                <div class="space-y-1">
+                  <label class="text-xs font-black text-[#2C3E50] block">畫質 (5~95)</label>
+                  <input 
+                    v-model.number="compressImgParams.quality"
+                    type="number"
+                    min="5"
+                    max="95"
+                    class="w-full px-3 py-2 text-sm font-bold bg-[#F0F4F8] border-[2px] border-[#2C3E50] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#10AC84]"
+                  />
+                </div>
+                <div class="space-y-1">
+                  <label class="text-xs font-black text-[#2C3E50] block">輸出格式</label>
+                  <select 
+                    v-model="compressImgParams.outFormat"
+                    class="w-full px-3 py-2 text-sm font-bold bg-[#F0F4F8] border-[2px] border-[#2C3E50] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#10AC84]"
+                  >
+                    <option value="JPEG">JPEG</option>
+                    <option value="WebP">WebP</option>
+                  </select>
+                </div>
+              </div>
+              <p class="text-[11px] font-bold text-gray-400">上傳多張照片時會自動打包成 ZIP 下載 📦</p>
             </div>
 
             <div class="bg-[#FFF9E6] p-4 rounded-xl border-[2px] border-[#2C3E50] shadow-[inset_2px_2px_0px_rgba(0,0,0,0.05)] text-sm space-y-2 font-bold text-gray-500">
@@ -472,10 +560,8 @@
 import { ref, computed, h } from 'vue';
 import * as pdfjsLib from 'pdfjs-dist';
 
-// 指定 PDF.js worker 路徑
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-// 狀態控制
 const currentStep = ref('hub');
 const currentToolId = ref('merge_pdf');
 const activeCategory = ref('all');
@@ -498,6 +584,21 @@ const splitParams = ref({
   mode: 'ranges',
   rangesStr: '1',
   chunkSize: 2
+});
+
+// ================= 極限壓縮參數狀態 =================
+const compressPdfParams = ref({
+  preset: 'auto',
+  targetMb: 4.5,
+  dpi: 75,
+  quality: 20,
+  keepColor: true
+});
+
+const compressImgParams = ref({
+  maxDimension: 1024,
+  quality: 25,
+  outFormat: 'JPEG'
 });
 
 // ================= 問題回報彈窗狀態 =================
@@ -718,12 +819,9 @@ const appendFiles = async (fileList) => {
 
 const categories = [
   { id: 'all', name: '全部' },
-  { id: 'workflow', name: '工作流程' },
   { id: 'organize', name: '整理 PDF' },
-  { id: 'optimize', name: '優化 PDF' },
-  { id: 'convert', name: 'PDF轉換' },
-  { id: 'edit', name: '編輯PDF文檔' },
-  { id: 'security', name: 'PDF 安全性' }
+  { id: 'optimize', name: '優化壓縮' },
+  { id: 'convert', name: 'PDF轉換' }
 ];
 
 const makeIcon = (pathD, textBadge = null) => {
@@ -747,7 +845,6 @@ const tools = [
     desc: '合併PDF文檔，並按照你的喜好排序，簡單又快速！',
     iconBg: 'bg-[#FF6B6B]',
     iconSvg: makeIcon('M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z'),
-    enabled: true,
     accept: '.pdf',
     buttonText: '選擇多個 PDF 檔案',
     actionText: '合併 PDF →'
@@ -759,7 +856,6 @@ const tools = [
     desc: '拆分出獨立頁面，或所有頁面，以便將其轉換為獨立的PDF文檔。',
     iconBg: 'bg-[#FECA57]',
     iconSvg: makeIcon('M9.64 7.64c.23-.5.36-1.05.36-1.64 0-2.21-1.79-4-4-4S2 3.79 2 6s1.79 4 4 4c.59 0 1.14-.13 1.64-.36L10 12l-2.36 2.36C7.14 14.13 6.59 14 6 14c-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4c0-.59-.13-1.14-.36-1.64L12 14l7 7h3v-1L9.64 7.64zM6 8c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm0 12c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm6-7.5c-.28 0-.5-.22-.5-.5s.22-.5.5-.5.5.22.5.5-.22.5-.5.5zM19 3l-6 6 2 2 7-7V3h-3z'),
-    enabled: true,
     accept: '.pdf',
     buttonText: '選擇 PDF 檔案',
     actionText: '拆分 PDF →'
@@ -767,11 +863,24 @@ const tools = [
   {
     id: 'compress_pdf',
     category: 'optimize',
-    title: '壓縮PDF',
-    desc: '減小PDF文檔的尺寸，但同時保持最佳品質。',
+    title: 'PDF 極限壓縮',
+    desc: '保留原檔外觀與印章細節，自動逼近目標 MB 或手動壓到最小！',
     iconBg: 'bg-[#48DBFB]',
     iconSvg: makeIcon('M19 12h-2v3h-3v2h5v-5zM7 9h3V7H5v5h2V9zm14-6H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16.01H3V4.99h18v14.02z'),
-    enabled: false
+    accept: '.pdf',
+    buttonText: '選擇 PDF 檔案',
+    actionText: '開始極限壓縮 →'
+  },
+  {
+    id: 'compress_images',
+    category: 'optimize',
+    title: '照片批次壓縮',
+    desc: '多張照片一次縮放並極限壓縮為 JPEG 或 WebP，自動打包下載！',
+    iconBg: 'bg-[#10AC84]',
+    iconSvg: makeIcon('M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z'),
+    accept: '.jpg,.jpeg,.png,.webp,.bmp',
+    buttonText: '選擇多張照片',
+    actionText: '批次極限壓縮 →'
   },
   {
     id: 'pdf_to_word',
@@ -780,28 +889,9 @@ const tools = [
     desc: '輕鬆地將PDF轉為可編輯的DOC和DOCX文檔。',
     iconBg: 'bg-[#1DD1A1]',
     iconSvg: makeIcon(null, 'W'),
-    enabled: true,
     accept: '.pdf',
     buttonText: '選擇 PDF 檔案',
     actionText: '轉換為 Word →'
-  },
-  {
-    id: 'pdf_to_ppt',
-    category: 'convert',
-    title: 'PDF 轉 PowerPoint',
-    desc: '將你的PDF轉換為可編輯的PPT和PPTX幻燈片。',
-    iconBg: 'bg-[#FF9F43]',
-    iconSvg: makeIcon(null, 'P'),
-    enabled: false
-  },
-  {
-    id: 'pdf_to_excel',
-    category: 'convert',
-    title: 'PDF 轉 Excel',
-    desc: '只需幾秒鐘，即可將數據直接從PDF文檔抽取至Excel中。',
-    iconBg: 'bg-[#5F27CD]',
-    iconSvg: makeIcon(null, 'X'),
-    enabled: false
   },
   {
     id: 'word_to_pdf',
@@ -810,37 +900,9 @@ const tools = [
     desc: '將DOC或DOCX轉換為PDF文檔，保持最佳品質。',
     iconBg: 'bg-[#54A0FF]',
     iconSvg: makeIcon(null, 'W'),
-    enabled: true,
     accept: '.docx,.doc',
     buttonText: '選擇 Word 文件',
     actionText: '轉換為 PDF →'
-  },
-  {
-    id: 'ppt_to_pdf',
-    category: 'convert',
-    title: 'PowerPoint 轉 PDF',
-    desc: '將PPT轉換為PDF文檔，保持最佳品質。',
-    iconBg: 'bg-[#FF9F43]',
-    iconSvg: makeIcon(null, 'P'),
-    enabled: false
-  },
-  {
-    id: 'excel_to_pdf',
-    category: 'convert',
-    title: 'Excel 轉 PDF',
-    desc: '將EXCEL表格轉換為PDF文檔，以方便瀏覽。',
-    iconBg: 'bg-[#10AC84]',
-    iconSvg: makeIcon(null, 'X'),
-    enabled: false
-  },
-  {
-    id: 'edit_pdf',
-    category: 'edit',
-    title: '編輯PDF文檔',
-    desc: '給PDF文檔添加文本、圖片、形狀或者手寫註釋。',
-    iconBg: 'bg-[#C8D6E5]',
-    iconSvg: makeIcon('M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z'),
-    enabled: false
   },
   {
     id: 'pdf_to_jpg',
@@ -849,7 +911,6 @@ const tools = [
     desc: '提取PDF文檔中的所有圖片，或將每一頁轉存為JPG。',
     iconBg: 'bg-[#FECA57]',
     iconSvg: makeIcon('M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z'),
-    enabled: true,
     accept: '.pdf',
     buttonText: '選擇 PDF 檔案',
     actionText: '轉換為 JPG →'
@@ -861,7 +922,6 @@ const tools = [
     desc: '將你的圖片轉換為PDF文檔。可以調整方向和邊距。',
     iconBg: 'bg-[#FF6B6B]',
     iconSvg: makeIcon('M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z'),
-    enabled: true,
     accept: '.jpg,.jpeg,.png',
     buttonText: '選擇多張圖片',
     actionText: '合併為 PDF →'
@@ -880,14 +940,6 @@ const activeToolMeta = computed(() => {
 const totalBytes = computed(() => {
   return files.value.reduce((acc, f) => acc + f.size, 0);
 });
-
-const onCardClick = (tool) => {
-  if (!tool.enabled) {
-    alert(`「${tool.title}」功能預計於下個版本更新！\n目前核心支援：合併、拆分、PDF↔Word、PDF↔JPG。`);
-    return;
-  }
-  selectTool(tool.id);
-};
 
 const selectTool = (toolId) => {
   currentToolId.value = toolId;
@@ -963,6 +1015,16 @@ const executeTool = async () => {
     formData.append('split_mode', splitParams.value.mode);
     formData.append('ranges_str', splitParams.value.rangesStr);
     formData.append('chunk_size', splitParams.value.chunkSize);
+  } else if (currentToolId.value === 'compress_pdf') {
+    formData.append('compress_preset', compressPdfParams.value.preset);
+    formData.append('target_mb', compressPdfParams.value.targetMb);
+    formData.append('dpi', compressPdfParams.value.dpi);
+    formData.append('quality', compressPdfParams.value.quality);
+    formData.append('keep_color', compressPdfParams.value.keepColor);
+  } else if (currentToolId.value === 'compress_images') {
+    formData.append('max_dimension', compressImgParams.value.maxDimension);
+    formData.append('quality', compressImgParams.value.quality);
+    formData.append('out_format', compressImgParams.value.outFormat);
   }
 
   try {
@@ -972,7 +1034,7 @@ const executeTool = async () => {
     const res = await fetch('/api/convert', { method: 'POST', body: formData });
     if (!res.ok) {
       const err = await res.json();
-      throw new Error(err.detail || '轉檔失敗');
+      throw new Error(err.detail || '處理失敗');
     }
 
     const data = await res.json();

@@ -1,11 +1,16 @@
 import os
+import io
 import uuid
 import shutil
 import zipfile
 from typing import List, Optional
+
+import fitz  # PyMuPDF
+from PIL import Image
 from fastapi import FastAPI, UploadFile, File, Form, BackgroundTasks, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.utils.security import sanitize_filename, clean_expired_tasks
 from app.services.pdf_engine import (
@@ -13,7 +18,7 @@ from app.services.pdf_engine import (
 )
 from app.services.office_engine import pdf_to_word_converter, word_to_pdf_libreoffice
 
-app = FastAPI(title="DocuMorph API", version="2.0")
+app = FastAPI(title="DocuMorph API", version="2.1")
 
 app.add_middleware(
     CORSMiddleware,
@@ -26,6 +31,146 @@ app.add_middleware(
 BASE_UPLOAD_DIR = os.path.abspath("tasks")
 os.makedirs(BASE_UPLOAD_DIR, exist_ok=True)
 
+
+# ======================== 極限畫質壓縮核心函式 ========================
+def _render_and_compress_pdf(src_doc, output_path: str, dpi: int, quality: int, keep_color: bool):
+    """使用 PyMuPDF 渲染頁面並交由 Pillow 進行 4:2:0 JPEG 極限壓縮"""
+    new_doc = fitz.open()
+    zoom = dpi / 72.0
+    mat = fitz.Matrix(zoom, zoom)
+    colorspace = fitz.csRGB if keep_color else fitz.csGRAY
+    mode_str = "RGB" if keep_color else "L"
+
+    try:
+        for page in src_doc:
+            pix = page.get_pixmap(matrix=mat, colorspace=colorspace, alpha=False)
+            img = Image.frombytes(mode_str, [pix.width, pix.height], pix.samples)
+            pix = None  # 立即釋放記憶體，避免雲端環境 OOM
+
+            buf = io.BytesIO()
+            img.save(
+                buf,
+                format="JPEG",
+                quality=quality,
+                optimize=True,
+                progressive=True,
+                subsampling=2,
+            )
+            img.close()
+            img_bytes = buf.getvalue()
+
+            rect = page.rect
+            new_page = new_doc.new_page(width=rect.width, height=rect.height)
+            new_page.insert_image(rect, stream=img_bytes)
+
+        new_doc.save(
+            output_path,
+            garbage=4,
+            deflate=True,
+            deflate_images=True,
+            deflate_fonts=True,
+            clean=True,
+        )
+    finally:
+        new_doc.close()
+
+
+def compress_pdf_extreme(
+    input_path: str,
+    output_path: str,
+    preset: str = "auto",
+    target_mb: float = 4.5,
+    manual_dpi: int = 75,
+    manual_quality: int = 20,
+    keep_color: bool = True,
+):
+    """依預設策略或自訂參數執行 PDF 極限壓縮"""
+    orig_bytes = os.path.getsize(input_path)
+    target_bytes = max(0.1, float(target_mb)) * 1024 * 1024
+
+    preset_map = {
+        "extreme": [{"dpi": 60, "quality": 12}],
+        "strong": [{"dpi": 75, "quality": 20}],
+        "medium": [{"dpi": 95, "quality": 30}],
+        "custom": [{
+            "dpi": max(40, min(200, int(manual_dpi))),
+            "quality": max(5, min(95, int(manual_quality))),
+        }],
+    }
+
+    if preset in preset_map:
+        profiles = preset_map[preset]
+    else:
+        # auto 模式：遞減畫質階梯逼近目標大小
+        profiles = [
+            {"dpi": 95, "quality": 30},
+            {"dpi": 80, "quality": 20},
+            {"dpi": 68, "quality": 15},
+            {"dpi": 55, "quality": 10},
+        ]
+
+    src_doc = fitz.open(input_path)
+    try:
+        for prof in profiles:
+            _render_and_compress_pdf(
+                src_doc,
+                output_path=output_path,
+                dpi=prof["dpi"],
+                quality=prof["quality"],
+                keep_color=keep_color,
+            )
+            out_bytes = os.path.getsize(output_path)
+            if out_bytes <= target_bytes and out_bytes < orig_bytes:
+                break
+    finally:
+        src_doc.close()
+
+
+def compress_single_image(
+    input_path: str,
+    output_dir: str,
+    max_dimension: int = 1024,
+    quality: int = 25,
+    out_format: str = "JPEG",
+) -> str:
+    """將單張照片縮放並以高壓縮率輸出為 JPEG 或 WebP"""
+    max_dim = max(300, min(4000, int(max_dimension)))
+    q = max(5, min(95, int(quality)))
+    file_name = os.path.basename(input_path)
+    base, _ = os.path.splitext(file_name)
+
+    with Image.open(input_path) as img:
+        if img.mode in ("RGBA", "LA") or (img.mode == "P" and "transparency" in img.info):
+            alpha = img.convert("RGBA")
+            bg = Image.new("RGBA", alpha.size, (255, 255, 255))
+            img = Image.alpha_composite(bg, alpha).convert("RGB")
+        elif img.mode != "RGB":
+            img = img.convert("RGB")
+
+        w, h = img.size
+        max_side = max(w, h)
+        if max_side > max_dim:
+            scale = max_dim / float(max_side)
+            img = img.resize((int(w * scale), int(h * scale)), Image.Resampling.LANCZOS)
+
+        if out_format.upper() == "WEBP":
+            out_path = os.path.join(output_dir, f"{base}_compressed.webp")
+            img.save(out_path, format="WEBP", quality=q, method=6)
+        else:
+            out_path = os.path.join(output_dir, f"{base}_compressed.jpg")
+            img.save(
+                out_path,
+                format="JPEG",
+                quality=q,
+                optimize=True,
+                progressive=True,
+                subsampling=2,
+            )
+
+    return out_path
+
+
+# ======================== API 端點 ========================
 @app.post("/api/info/pdf")
 async def inspect_pdf(file: UploadFile = File(...)):
     """輕量端點：快速讀取上傳 PDF 的總頁數"""
@@ -42,6 +187,7 @@ async def inspect_pdf(file: UploadFile = File(...)):
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
+
 @app.post("/api/convert")
 async def execute_conversion(
     background_tasks: BackgroundTasks,
@@ -50,8 +196,17 @@ async def execute_conversion(
     split_mode: Optional[str] = Form("all_single"),
     ranges_str: Optional[str] = Form(""),
     chunk_size: Optional[int] = Form(2),
+    # PDF 極限壓縮參數
+    compress_preset: Optional[str] = Form("auto"),
+    target_mb: Optional[float] = Form(4.5),
+    dpi: Optional[int] = Form(75),
+    quality: Optional[int] = Form(20),
+    keep_color: Optional[bool] = Form(True),
+    # 照片批次極限壓縮參數
+    max_dimension: Optional[int] = Form(1024),
+    out_format: Optional[str] = Form("JPEG"),
 ):
-    """核心轉檔端點"""
+    """核心轉檔與壓縮端點"""
     background_tasks.add_task(clean_expired_tasks, BASE_UPLOAD_DIR)
 
     task_id = uuid.uuid4().hex
@@ -85,6 +240,32 @@ async def execute_conversion(
             )
             output_files.extend(out_list)
 
+        elif mode == "compress_pdf":
+            for f in saved_files:
+                base = os.path.splitext(os.path.basename(f))[0]
+                out_pdf = os.path.join(output_dir, f"{base}_min.pdf")
+                compress_pdf_extreme(
+                    f,
+                    out_pdf,
+                    preset=compress_preset,
+                    target_mb=target_mb,
+                    manual_dpi=dpi,
+                    manual_quality=quality,
+                    keep_color=keep_color,
+                )
+                output_files.append(out_pdf)
+
+        elif mode == "compress_images":
+            for f in saved_files:
+                out_img = compress_single_image(
+                    f,
+                    output_dir,
+                    max_dimension=max_dimension,
+                    quality=quality,
+                    out_format=out_format,
+                )
+                output_files.append(out_img)
+
         elif mode == "pdf_to_jpg":
             for f in saved_files:
                 imgs = safe_pdf_to_jpg(f, output_dir)
@@ -112,27 +293,29 @@ async def execute_conversion(
         else:
             raise HTTPException(status_code=400, detail=f"不支援的轉檔模式: {mode}")
 
+    except HTTPException:
+        shutil.rmtree(task_dir, ignore_errors=True)
+        raise
     except Exception as e:
         shutil.rmtree(task_dir, ignore_errors=True)
         raise HTTPException(status_code=500, detail=str(e))
 
     if len(output_files) == 1:
         download_name = os.path.basename(output_files[0])
-        final_path = output_files[0]
     else:
         zip_path = os.path.join(task_dir, "轉換成果打包.zip")
-        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as z:
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
             for f in output_files:
                 z.write(f, arcname=os.path.basename(f))
         download_name = "轉換成果打包.zip"
-        final_path = zip_path
 
     return {
         "status": "success",
         "task_id": task_id,
         "filename": download_name,
-        "download_url": f"/api/download/{task_id}?filename={download_name}"
+        "download_url": f"/api/download/{task_id}?filename={download_name}",
     }
+
 
 @app.get("/api/download/{task_id}")
 async def download_task_file(task_id: str, filename: str):
@@ -146,19 +329,19 @@ async def download_task_file(task_id: str, filename: str):
             return FileResponse(
                 os.path.join(root, filename),
                 filename=filename,
-                media_type="application/octet-stream"
+                media_type="application/octet-stream",
             )
     raise HTTPException(status_code=404, detail="找不到指定下載檔案")
 
-import os
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
 
 _s = os.path.join(os.path.dirname(__file__), "../static")
 if os.path.exists(_s):
     app.mount("/assets", StaticFiles(directory=os.path.join(_s, "assets")), name="assets")
+
     @app.get("/")
-    async def _r(): return FileResponse(os.path.join(_s, "index.html"))
+    async def _r():
+        return FileResponse(os.path.join(_s, "index.html"))
+
     @app.get("/{p:path}")
     async def _spa(p: str):
         f = os.path.join(_s, p)

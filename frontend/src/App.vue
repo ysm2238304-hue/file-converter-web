@@ -8,7 +8,6 @@
         
         <!-- 左側 Logo 與主要功能 -->
         <div class="flex items-center space-x-8">
-          <!-- 卡通風格 LOGO -->
           <div @click="goToHome" class="flex items-center space-x-2 cursor-pointer select-none group">
             <span class="bg-[#FF6B6B] text-white px-3 py-1.5 rounded-xl border-[3px] border-[#2C3E50] shadow-[3px_3px_0px_#2C3E50] rotate-[-5deg] text-xl font-black group-hover:rotate-0 transition-transform">
               PDF
@@ -21,7 +20,7 @@
             <button @click="selectTool('merge_pdf')" class="hover:text-[#FF6B6B] transition-colors cursor-pointer">合併PDF</button>
             <button @click="selectTool('split_pdf')" class="hover:text-[#FF6B6B] transition-colors cursor-pointer">拆分PDF</button>
             <button @click="selectTool('compress_pdf')" class="hover:text-[#FF6B6B] transition-colors cursor-pointer">壓縮PDF</button>
-            <button @click="selectTool('compress_images')" class="hover:text-[#FF6B6B] transition-colors cursor-pointer">照片壓縮</button>
+            <button @click="selectTool('heic_to_jpg')" class="hover:text-[#FF6B6B] transition-colors cursor-pointer">HEIC轉JPG</button>
             <button @click="goToHome" class="hover:text-[#FF6B6B] transition-colors cursor-pointer">所有工具 ▾</button>
           </nav>
         </div>
@@ -81,7 +80,7 @@
         </div>
 
         <!-- 卡通卡片網格 -->
-        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-6 pt-4 max-w-6xl mx-auto">
+        <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-6 pt-4 max-w-6xl mx-auto">
           <div 
             v-for="tool in filteredTools" 
             :key="tool.id"
@@ -147,6 +146,9 @@
             <div class="space-y-3">
               <h2 class="text-3xl font-black text-[#2C3E50]">{{ activeToolMeta.title }}</h2>
               <p class="text-sm font-bold text-gray-500">{{ activeToolMeta.desc }}</p>
+              <p v-if="isImageBatchTool" class="inline-block text-xs font-black text-[#FF6B6B] bg-[#FFF0F0] px-3 py-1 rounded-full border-[2px] border-[#FF6B6B]">
+                📌 單次上限：最多 {{ MAX_IMAGE_COUNT }} 張照片，合計不超過 50 MB
+              </p>
             </div>
 
             <button 
@@ -230,11 +232,14 @@
               </div>
             </div>
 
-            <!-- 情況 B：其他功能（檔案列表 + 封面第 1 頁或照片縮圖） -->
+            <!-- 情況 B：其他功能（檔案列表 + 縮圖） -->
             <div v-else class="space-y-5">
-              <div class="flex items-center justify-between bg-white p-4 rounded-2xl border-[3px] border-[#2C3E50] shadow-[4px_4px_0px_#2C3E50]">
+              <div class="flex flex-wrap items-center justify-between gap-2 bg-white p-4 rounded-2xl border-[3px] border-[#2C3E50] shadow-[4px_4px_0px_#2C3E50]">
                 <span class="text-sm font-black text-[#2C3E50]">
                   已選取 {{ files.length }} 個檔案
+                  <span v-if="isImageBatchTool" class="text-xs font-bold text-gray-400 ml-1">
+                    (上限 {{ MAX_IMAGE_COUNT }} 張 / 50 MB)
+                  </span>
                 </span>
                 <button @click="triggerFileInput" class="text-sm font-black text-[#FF6B6B] hover:underline bg-[#FFF0F0] px-3 py-1 rounded-lg border-[2px] border-[#FF6B6B] cursor-pointer">
                   ➕ 新增檔案
@@ -420,7 +425,22 @@
                   </select>
                 </div>
               </div>
-              <p class="text-[11px] font-bold text-gray-400">上傳多張照片時會自動打包成 ZIP 下載 📦</p>
+              <p class="text-[11px] font-bold text-gray-400">支援 JPG / PNG / HEIC；單次限 {{ MAX_IMAGE_COUNT }} 張 / 50 MB，多張自動打包 ZIP 📦</p>
+            </div>
+
+            <!-- 4. HEIC 轉 JPG 設定選項 -->
+            <div v-else-if="currentToolId === 'heic_to_jpg'" class="space-y-4 pt-4 border-t-[2px] border-slate-100">
+              <div class="space-y-1.5">
+                <label class="text-xs font-black text-[#2C3E50] block">輸出 JPG 畫質 (50~100)</label>
+                <input 
+                  v-model.number="heicParams.quality"
+                  type="number"
+                  min="50"
+                  max="100"
+                  class="w-full px-3 py-2 text-sm font-bold bg-[#F0F4F8] border-[2px] border-[#2C3E50] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#FF9F43]"
+                />
+              </div>
+              <p class="text-[11px] font-bold text-gray-400">保持原始解析度並自動修正直拍旋轉方向；單次限 {{ MAX_IMAGE_COUNT }} 張 / 50 MB，多張自動打包 ZIP 📦</p>
             </div>
 
             <div class="bg-[#FFF9E6] p-4 rounded-xl border-[2px] border-[#2C3E50] shadow-[inset_2px_2px_0px_rgba(0,0,0,0.05)] text-sm space-y-2 font-bold text-gray-500">
@@ -562,6 +582,9 @@ import * as pdfjsLib from 'pdfjs-dist';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
+const MAX_IMAGE_COUNT = 20;
+const MAX_IMAGE_BYTES = 50 * 1024 * 1024; // 50 MB
+
 const currentStep = ref('hub');
 const currentToolId = ref('merge_pdf');
 const activeCategory = ref('all');
@@ -586,7 +609,7 @@ const splitParams = ref({
   chunkSize: 2
 });
 
-// ================= 極限壓縮參數狀態 =================
+// ================= 極限壓縮 & HEIC 參數狀態 =================
 const compressPdfParams = ref({
   preset: 'auto',
   targetMb: 4.5,
@@ -599,6 +622,10 @@ const compressImgParams = ref({
   maxDimension: 1024,
   quality: 25,
   outFormat: 'JPEG'
+});
+
+const heicParams = ref({
+  quality: 92
 });
 
 // ================= 問題回報彈窗狀態 =================
@@ -762,8 +789,27 @@ const onRangesInput = () => {
 };
 
 // ================= 檔案上傳與解析處理 =================
+const isImageBatchTool = computed(() => {
+  return currentToolId.value === 'compress_images' || currentToolId.value === 'heic_to_jpg';
+});
+
 const appendFiles = async (fileList) => {
-  for (let f of fileList) {
+  const incoming = Array.from(fileList || []);
+  if (incoming.length === 0) return;
+
+  if (isImageBatchTool.value) {
+    if (files.value.length + incoming.length > MAX_IMAGE_COUNT) {
+      alert(`單次最多僅支援上傳 ${MAX_IMAGE_COUNT} 張照片，請分批處理！`);
+      return;
+    }
+    const incomingBytes = incoming.reduce((acc, f) => acc + f.size, 0);
+    if (totalBytes.value + incomingBytes > MAX_IMAGE_BYTES) {
+      alert('單次上傳照片總大小不可超過 50 MB，請分批處理！');
+      return;
+    }
+  }
+
+  for (const f of incoming) {
     const ext = f.name.split('.').pop().toLowerCase();
     const item = {
       id: Math.random().toString(36).substring(2, 9),
@@ -775,7 +821,7 @@ const appendFiles = async (fileList) => {
       thumbnail: null
     };
 
-    if (f.type.startsWith('image/')) {
+    if (f.type.startsWith('image/') && ext !== 'heic' && ext !== 'heif') {
       item.thumbnail = URL.createObjectURL(f);
     }
 
@@ -821,7 +867,7 @@ const categories = [
   { id: 'all', name: '全部' },
   { id: 'organize', name: '整理 PDF' },
   { id: 'optimize', name: '優化壓縮' },
-  { id: 'convert', name: 'PDF轉換' }
+  { id: 'convert', name: '格式轉換' }
 ];
 
 const makeIcon = (pathD, textBadge = null) => {
@@ -875,12 +921,23 @@ const tools = [
     id: 'compress_images',
     category: 'optimize',
     title: '照片批次壓縮',
-    desc: '多張照片一次縮放並極限壓縮為 JPEG 或 WebP，自動打包下載！',
+    desc: '支援 JPG/PNG/HEIC 一次縮放壓縮為 JPEG 或 WebP（限 20 張 / 50 MB）',
     iconBg: 'bg-[#10AC84]',
     iconSvg: makeIcon('M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z'),
-    accept: '.jpg,.jpeg,.png,.webp,.bmp',
+    accept: '.jpg,.jpeg,.png,.webp,.bmp,.heic,.heif',
     buttonText: '選擇多張照片',
     actionText: '批次極限壓縮 →'
+  },
+  {
+    id: 'heic_to_jpg',
+    category: 'convert',
+    title: 'HEIC 轉 JPG',
+    desc: '將 iPhone 的 HEIC 照片快速轉成通用 JPG（限 20 張 / 50 MB）',
+    iconBg: 'bg-[#FF9F43]',
+    iconSvg: makeIcon(null, 'HEIC'),
+    accept: '.heic,.heif',
+    buttonText: '選擇 HEIC 照片',
+    actionText: '轉換為 JPG →'
   },
   {
     id: 'pdf_to_word',
@@ -1025,6 +1082,8 @@ const executeTool = async () => {
     formData.append('max_dimension', compressImgParams.value.maxDimension);
     formData.append('quality', compressImgParams.value.quality);
     formData.append('out_format', compressImgParams.value.outFormat);
+  } else if (currentToolId.value === 'heic_to_jpg') {
+    formData.append('heic_quality', heicParams.value.quality);
   }
 
   try {

@@ -1,7 +1,7 @@
 <template>
   <div class="min-h-screen w-full bg-[#FFF9E6] bg-dots text-[#2C3E50] font-cartoon antialiased flex flex-col relative selection:bg-[#FF6B6B] selection:text-white">
     
-    <!-- ================= 全域卡通 Toast 通知條 (取代原生 alert) ================= -->
+    <!-- ================= 全域卡通 Toast 通知條 ================= -->
     <Transition name="toast">
       <div 
         v-if="toast.show"
@@ -21,7 +21,6 @@
       <div class="max-w-[1440px] mx-auto px-4 sm:px-8 h-18 sm:h-20 flex items-center justify-between gap-4">
         
         <div class="flex items-center space-x-6 lg:space-x-8">
-          <!-- 卡通 LOGO -->
           <div @click="goToHome" class="flex items-center space-x-2.5 cursor-pointer select-none group">
             <span class="bg-[#FF6B6B] text-white px-3 py-1 rounded-xl border-[3px] border-[#2C3E50] shadow-[3px_3px_0px_#2C3E50] -rotate-3 text-lg sm:text-xl font-black group-hover:rotate-0 transition-transform">
               PDF
@@ -29,10 +28,9 @@
             <span class="text-xl sm:text-2xl font-black tracking-tight text-[#2C3E50]">黑糖饅頭 🥟</span>
           </div>
 
-          <!-- 頂部捷徑連結 -->
           <nav class="hidden md:flex items-center space-x-2 text-sm font-black text-[#2C3E50]">
             <button 
-              v-for="navId in ['merge_pdf', 'split_pdf', 'compress_pdf', 'heic_to_jpg']" 
+              v-for="navId in ['merge_pdf', 'organize_pdf', 'compress_pdf', 'heic_to_jpg']" 
               :key="navId"
               @click="selectTool(navId)"
               :class="[
@@ -68,7 +66,6 @@
       <!-- ================= 視圖 1：首頁工具大廳 ================= -->
       <section v-if="currentStep === 'hub'" class="max-w-6xl mx-auto px-4 sm:px-8 py-8 sm:py-10 w-full space-y-8 relative z-10">
         
-        <!-- 精簡標題區 -->
         <div class="text-center space-y-3 max-w-3xl mx-auto pt-2">
           <h1 class="text-3xl sm:text-5xl font-black text-[#2C3E50] tracking-tight leading-tight">
             <span class="relative inline-block">
@@ -78,7 +75,7 @@
             🥟
           </h1>
           <p class="text-sm sm:text-base font-bold text-gray-500 max-w-xl mx-auto">
-            完全免費、免註冊！合併拆分、極限壓縮、HEIC 轉 JPG 一站搞定 ✨
+            完全免費、免註冊！整理旋轉、極限壓縮、HEIC 轉檔、加密解鎖一站搞定 ✨
           </p>
         </div>
 
@@ -100,7 +97,7 @@
           </button>
         </div>
 
-        <!-- 卡通卡片網格（含格式標籤與統一高度） -->
+        <!-- 卡通卡片網格 -->
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 pt-2">
           <div 
             v-for="tool in filteredTools" 
@@ -126,7 +123,6 @@
               </div>
             </div>
 
-            <!-- 底部支援格式徽章 -->
             <div class="flex items-center justify-between pt-3 border-t-[2px] border-dashed border-slate-200">
               <div class="flex flex-wrap gap-1.5">
                 <span 
@@ -157,7 +153,7 @@
           @change="handleFileInput" 
         />
 
-        <!-- 頂部工具切換列（免回大廳即可一鍵切換） -->
+        <!-- 頂部工具切換列 -->
         <div class="bg-white border-b-[3px] border-[#2C3E50] py-3 px-4 sm:px-6 shadow-xs">
           <div class="max-w-[1440px] mx-auto flex flex-wrap items-center justify-between gap-3">
             <div class="flex items-center gap-3">
@@ -172,7 +168,6 @@
               </div>
             </div>
 
-            <!-- 快速切換所有工具 -->
             <div class="flex items-center gap-1.5 overflow-x-auto max-w-full py-1">
               <button
                 v-for="t in tools"
@@ -307,7 +302,69 @@
               </div>
             </div>
 
-            <!-- 情況 B：其他功能（支援拖曳排序的檔案卡片網格） -->
+            <!-- 情況 B：PDF 旋轉與刪頁整理模式 -->
+            <div v-else-if="currentToolId === 'organize_pdf'" class="space-y-4">
+              <div class="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-2xl border-[3px] border-[#2C3E50] shadow-[4px_4px_0px_#2C3E50]">
+                <div class="flex items-center gap-2">
+                  <span class="text-sm font-black text-[#2C3E50]">
+                    📄 {{ files[0]?.name }} (保留 {{ organizePages.length }} / {{ files[0]?.pages || organizePages.length }} 頁)
+                  </span>
+                  <span v-if="isRenderingPages" class="text-xs font-bold text-[#FF6B6B] animate-pulse">
+                    縮圖生成中... ⏳
+                  </span>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-2">
+                  <button @click="rotateAllOrganizePages(90)" class="px-2.5 py-1 text-xs font-black bg-[#F0F4F8] hover:bg-[#FECA57] border-[2px] border-[#2C3E50] rounded-lg shadow-[1px_1px_0px_#2C3E50] cursor-pointer">全部右轉 90°</button>
+                  <button @click="resetOrganizePages" class="px-2.5 py-1 text-xs font-black bg-[#F0F4F8] hover:bg-[#48DBFB] border-[2px] border-[#2C3E50] rounded-lg shadow-[1px_1px_0px_#2C3E50] cursor-pointer">全部重置</button>
+                  <button @click="triggerFileInput" class="text-xs font-black text-[#FF6B6B] bg-[#FFF0F0] px-3 py-1 rounded-lg border-[2px] border-[#FF6B6B] cursor-pointer">更換檔案</button>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-4">
+                <div 
+                  v-for="(page, idx) in organizePages" 
+                  :key="page.uid"
+                  class="bg-white rounded-2xl border-[3px] border-[#2C3E50] shadow-[4px_4px_0px_#2C3E50] p-2.5 relative flex flex-col justify-between aspect-[3/4]"
+                >
+                  <div class="absolute top-2.5 left-2.5 px-2 h-6 rounded-full bg-[#FECA57] border-[2px] border-[#2C3E50] text-[#2C3E50] text-[11px] font-black flex items-center justify-center shadow-[1px_1px_0px_#2C3E50] z-10">
+                    #{{ idx + 1 }} <span class="opacity-60 ml-1">(原P{{ page.pageNum }})</span>
+                  </div>
+
+                  <button 
+                    @click="removeOrganizePage(idx)"
+                    title="刪除此頁"
+                    class="absolute top-2.5 right-2.5 w-6 h-6 rounded-full bg-white border-[2px] border-[#2C3E50] text-[#2C3E50] hover:bg-[#FF6B6B] hover:text-white flex items-center justify-center text-[11px] font-black shadow-[1px_1px_0px_#2C3E50] z-10 cursor-pointer"
+                  >
+                    ✕
+                  </button>
+
+                  <div class="flex-1 flex items-center justify-center overflow-hidden rounded-xl border-[2px] border-slate-200 bg-[#F9FAFB] my-1 p-2">
+                    <img 
+                      v-if="page.thumbnail" 
+                      :src="page.thumbnail" 
+                      :style="{ transform: `rotate(${page.rotate}deg)` }"
+                      class="max-w-full max-h-full object-contain transition-transform duration-200 pointer-events-none" 
+                    />
+                    <div v-else class="text-xs font-bold text-gray-300 flex flex-col items-center gap-1">
+                      <span class="animate-spin text-lg">⏳</span>
+                      <span>加載中</span>
+                    </div>
+                  </div>
+
+                  <div class="flex items-center justify-between pt-1.5 border-t-[2px] border-slate-100 text-xs font-black">
+                    <button :disabled="idx === 0" @click="moveOrganizePage(idx, -1)" class="px-1.5 py-0.5 hover:text-[#FF6B6B] disabled:opacity-20 cursor-pointer">◀</button>
+                    <div class="flex items-center gap-1">
+                      <button @click="rotateOrganizePage(idx, -90)" title="左轉 90°" class="px-1.5 py-0.5 bg-[#F0F4F8] hover:bg-[#FECA57] rounded border border-[#2C3E50] cursor-pointer">↺</button>
+                      <button @click="rotateOrganizePage(idx, 90)" title="右轉 90°" class="px-1.5 py-0.5 bg-[#F0F4F8] hover:bg-[#FECA57] rounded border border-[#2C3E50] cursor-pointer">↻</button>
+                    </div>
+                    <button :disabled="idx === organizePages.length - 1" @click="moveOrganizePage(idx, 1)" class="px-1.5 py-0.5 hover:text-[#FF6B6B] disabled:opacity-20 cursor-pointer">▶</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 情況 C：其他功能（支援拖曳排序的檔案卡片網格） -->
             <div v-else class="space-y-4">
               <div class="flex flex-wrap items-center justify-between gap-2 bg-white p-4 rounded-2xl border-[3px] border-[#2C3E50] shadow-[4px_4px_0px_#2C3E50]">
                 <div class="flex items-center gap-2">
@@ -389,7 +446,7 @@
               <p class="text-xs font-bold text-gray-400">配置你的專屬饅頭配方 ⚙️</p>
             </div>
 
-            <!-- 1. 拆分 PDF 設定選項（分段按鈕 + 輸出預告） -->
+            <!-- 1. 拆分 PDF 設定選項 -->
             <div v-if="currentToolId === 'split_pdf'" class="space-y-4 pt-4 border-t-[2px] border-slate-100">
               <label class="text-xs font-black text-[#2C3E50] block">分割模式</label>
               <div class="grid grid-cols-2 gap-2">
@@ -432,7 +489,120 @@
               </p>
             </div>
 
-            <!-- 2. PDF 極限壓縮設定選項 -->
+            <!-- 2. PDF 旋轉與刪頁整理摘要 -->
+            <div v-else-if="currentToolId === 'organize_pdf'" class="space-y-3 pt-4 border-t-[2px] border-slate-100 text-xs font-bold text-gray-600">
+              <div class="flex justify-between">
+                <span>預計輸出頁數</span>
+                <span class="font-black text-[#2C3E50]">{{ organizePages.length }} 頁</span>
+              </div>
+              <div class="flex justify-between">
+                <span>已旋轉頁面</span>
+                <span class="font-black text-[#FF6B6B]">{{ organizePages.filter(p => p.rotate % 360 !== 0).length }} 頁</span>
+              </div>
+              <p class="text-[11px] text-gray-400 leading-relaxed">
+                點左側縮圖下方的 ↺ / ↻ 可旋轉，◀ / ▶ 調整頁序，右上角 ✕ 刪除不要的頁面。
+              </p>
+            </div>
+
+            <!-- 3. PDF 加密 / 解鎖設定選項 -->
+            <div v-else-if="currentToolId === 'security_pdf'" class="space-y-4 pt-4 border-t-[2px] border-slate-100">
+              <div class="space-y-1.5">
+                <label class="text-xs font-black text-[#2C3E50] block">處理模式</label>
+                <div class="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    @click="securityParams.action = 'encrypt'"
+                    :class="[
+                      'py-2 rounded-xl text-xs font-black border-[2px] border-[#2C3E50] cursor-pointer transition-all',
+                      securityParams.action === 'encrypt' ? 'bg-[#5F27CD] text-white shadow-[2px_2px_0px_#2C3E50]' : 'bg-[#F0F4F8] text-gray-500'
+                    ]"
+                  >
+                    🔒 設定密碼
+                  </button>
+                  <button
+                    type="button"
+                    @click="securityParams.action = 'unlock'"
+                    :class="[
+                      'py-2 rounded-xl text-xs font-black border-[2px] border-[#2C3E50] cursor-pointer transition-all',
+                      securityParams.action === 'unlock' ? 'bg-[#1DD1A1] text-white shadow-[2px_2px_0px_#2C3E50]' : 'bg-[#F0F4F8] text-gray-500'
+                    ]"
+                  >
+                    🔓 解除密碼
+                  </button>
+                </div>
+              </div>
+
+              <div class="space-y-1.5">
+                <label class="text-xs font-black text-[#2C3E50] block">
+                  {{ securityParams.action === 'encrypt' ? '設定開啟密碼 (AES-256)' : '輸入原本的 PDF 密碼' }}
+                </label>
+                <div class="relative">
+                  <input 
+                    v-model="securityParams.password"
+                    :type="securityParams.showPassword ? 'text' : 'password'"
+                    placeholder="請輸入密碼..."
+                    class="w-full pl-3.5 pr-10 py-2 text-sm font-bold bg-[#F0F4F8] border-[2px] border-[#2C3E50] rounded-xl focus:outline-none focus:ring-2 focus:ring-[#5F27CD]"
+                  />
+                  <button
+                    type="button"
+                    @click="securityParams.showPassword = !securityParams.showPassword"
+                    class="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-black text-gray-500 hover:text-[#2C3E50] cursor-pointer"
+                  >
+                    {{ securityParams.showPassword ? '隱藏' : '顯示' }}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 4. 照片排版成 A4 PDF 設定選項 -->
+            <div v-else-if="currentToolId === 'images_to_a4_pdf'" class="space-y-4 pt-4 border-t-[2px] border-slate-100">
+              <div class="space-y-1.5">
+                <label class="text-xs font-black text-[#2C3E50] block">每頁照片張數</label>
+                <div class="grid grid-cols-3 gap-2">
+                  <button
+                    v-for="opt in [{ id: '1_up', label: '1張/頁' }, { id: '2_up', label: '2張/頁' }, { id: '4_up', label: '4張/頁' }]"
+                    :key="opt.id"
+                    type="button"
+                    @click="a4Params.layout = opt.id"
+                    :class="[
+                      'py-2 rounded-xl text-xs font-black border-[2px] border-[#2C3E50] cursor-pointer transition-all',
+                      a4Params.layout === opt.id ? 'bg-[#FECA57] shadow-[2px_2px_0px_#2C3E50]' : 'bg-[#F0F4F8] text-gray-500'
+                    ]"
+                  >
+                    {{ opt.label }}
+                  </button>
+                </div>
+              </div>
+
+              <div class="space-y-1.5">
+                <label class="text-xs font-black text-[#2C3E50] block">A4 紙張方向</label>
+                <div class="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    @click="a4Params.orientation = 'portrait'"
+                    :class="[
+                      'py-2 rounded-xl text-xs font-black border-[2px] border-[#2C3E50] cursor-pointer transition-all',
+                      a4Params.orientation === 'portrait' ? 'bg-[#48DBFB] shadow-[2px_2px_0px_#2C3E50]' : 'bg-[#F0F4F8] text-gray-500'
+                    ]"
+                  >
+                    直式 A4
+                  </button>
+                  <button
+                    type="button"
+                    @click="a4Params.orientation = 'landscape'"
+                    :class="[
+                      'py-2 rounded-xl text-xs font-black border-[2px] border-[#2C3E50] cursor-pointer transition-all',
+                      a4Params.orientation === 'landscape' ? 'bg-[#48DBFB] shadow-[2px_2px_0px_#2C3E50]' : 'bg-[#F0F4F8] text-gray-500'
+                    ]"
+                  >
+                    橫式 A4
+                  </button>
+                </div>
+              </div>
+              <p class="text-[11px] font-bold text-gray-400">支援拖曳左側卡片調整照片先後順序，含 HEIC 自動轉正 ✨</p>
+            </div>
+
+            <!-- 5. PDF 極限壓縮設定選項 -->
             <div v-else-if="currentToolId === 'compress_pdf'" class="space-y-4 pt-4 border-t-[2px] border-slate-100">
               <div class="space-y-1.5">
                 <label class="text-xs font-black text-[#2C3E50] block">壓縮強度預設</label>
@@ -493,7 +663,7 @@
               </label>
             </div>
 
-            <!-- 3. 照片批次極限壓縮設定選項 -->
+            <!-- 6. 照片批次極限壓縮設定選項 -->
             <div v-else-if="currentToolId === 'compress_images'" class="space-y-4 pt-4 border-t-[2px] border-slate-100">
               <div class="space-y-1.5">
                 <label class="text-xs font-black text-[#2C3E50] block">最大長邊限制 (px)</label>
@@ -540,7 +710,7 @@
               </div>
             </div>
 
-            <!-- 4. HEIC 轉 JPG 設定選項 -->
+            <!-- 7. HEIC 轉 JPG 設定選項 -->
             <div v-else-if="currentToolId === 'heic_to_jpg'" class="space-y-4 pt-4 border-t-[2px] border-slate-100">
               <div class="space-y-1.5">
                 <div class="flex justify-between text-xs font-black text-[#2C3E50]">
@@ -575,7 +745,6 @@
                 </span>
               </div>
 
-              <!-- 照片批次工具即時配額進度條 -->
               <div v-if="isImageBatchTool" class="space-y-1 pt-1">
                 <div class="w-full bg-white h-2.5 rounded-full border-[2px] border-[#2C3E50] overflow-hidden">
                   <div 
@@ -612,7 +781,6 @@
             <p class="text-sm font-bold text-gray-500 break-all">{{ downloadFilename }}</p>
           </div>
 
-          <!-- 處理前後大小對比卡 -->
           <div v-if="resultStats.originalBytes > 0" class="bg-[#FFF9E6] p-4 rounded-2xl border-[2px] border-[#2C3E50] space-y-2 text-xs font-bold">
             <div class="flex items-center justify-between text-gray-500">
               <span>原始大小</span>
@@ -780,7 +948,7 @@ const showToast = (message, type = 'error') => {
   }, 3600);
 };
 
-// ================= 拆分預覽與頁面選取狀態 =================
+// ================= 拆分預覽 & 旋轉刪頁整理狀態 =================
 const splitPages = ref([]);
 const selectedPages = ref(new Set());
 const isRenderingPages = ref(false);
@@ -791,7 +959,50 @@ const splitParams = ref({
   chunkSize: 2
 });
 
-// ================= 極限壓縮 & HEIC 參數狀態 =================
+const organizePages = ref([]);
+const initialOrganizeCount = ref(0);
+
+const rotateOrganizePage = (idx, delta) => {
+  const target = organizePages.value[idx];
+  if (target) {
+    target.rotate = (target.rotate + delta + 360) % 360;
+  }
+};
+
+const rotateAllOrganizePages = (delta) => {
+  organizePages.value.forEach(p => {
+    p.rotate = (p.rotate + delta + 360) % 360;
+  });
+};
+
+const moveOrganizePage = (idx, offset) => {
+  const targetIdx = idx + offset;
+  if (targetIdx < 0 || targetIdx >= organizePages.value.length) return;
+  const moved = organizePages.value.splice(idx, 1)[0];
+  organizePages.value.splice(targetIdx, 0, moved);
+};
+
+const removeOrganizePage = (idx) => {
+  if (organizePages.value.length <= 1) {
+    showToast('至少要保留 1 頁 PDF 才能輸出喔！');
+    return;
+  }
+  organizePages.value.splice(idx, 1);
+};
+
+const resetOrganizePages = () => {
+  const total = initialOrganizeCount.value;
+  if (!total) return;
+  const thumbMap = new Map(organizePages.value.map(p => [p.pageNum, p.thumbnail]));
+  organizePages.value = Array.from({ length: total }, (_, i) => ({
+    uid: `p_${i + 1}_${Date.now()}`,
+    pageNum: i + 1,
+    rotate: 0,
+    thumbnail: thumbMap.get(i + 1) || null
+  }));
+};
+
+// ================= 壓縮 / HEIC / 加密 / A4 排版參數 =================
 const compressPdfParams = ref({
   preset: 'auto',
   targetMb: 4.5,
@@ -808,6 +1019,17 @@ const compressImgParams = ref({
 
 const heicParams = ref({
   quality: 92
+});
+
+const securityParams = ref({
+  action: 'encrypt',
+  password: '',
+  showPassword: false
+});
+
+const a4Params = ref({
+  layout: '2_up',
+  orientation: 'portrait'
 });
 
 // ================= 問題回報彈窗狀態 =================
@@ -972,7 +1194,7 @@ const onRangesInput = () => {
 
 // ================= 檔案上傳與解析處理 =================
 const isImageBatchTool = computed(() => {
-  return currentToolId.value === 'compress_images' || currentToolId.value === 'heic_to_jpg';
+  return ['compress_images', 'heic_to_jpg', 'images_to_a4_pdf'].includes(currentToolId.value);
 });
 
 const appendFiles = async (fileList) => {
@@ -1036,8 +1258,35 @@ const appendFiles = async (fileList) => {
 
           return;
         }
+
+        if (currentToolId.value === 'organize_pdf') {
+          files.value = [item];
+          organizePages.value = [];
+          initialOrganizeCount.value = pdfDoc.numPages;
+          isRenderingPages.value = true;
+
+          for (let i = 1; i <= pdfDoc.numPages; i++) {
+            organizePages.value.push({
+              uid: `p_${i}_${Date.now()}`,
+              pageNum: i,
+              rotate: 0,
+              thumbnail: null
+            });
+          }
+
+          (async () => {
+            for (let i = 1; i <= pdfDoc.numPages; i++) {
+              const thumb = await renderPageThumbnail(pdfDoc, i, 160);
+              const target = organizePages.value.find(p => p.pageNum === i);
+              if (target) target.thumbnail = thumb;
+            }
+            isRenderingPages.value = false;
+          })();
+
+          return;
+        }
       } catch (err) {
-        console.error('PDF 解析失敗:', err);
+        console.error('PDF 解析失敗（可能已加密）:', err);
       }
     }
 
@@ -1049,7 +1298,8 @@ const categories = [
   { id: 'all', name: '全部' },
   { id: 'organize', name: '整理 PDF' },
   { id: 'optimize', name: '優化壓縮' },
-  { id: 'convert', name: '格式轉換' }
+  { id: 'convert', name: '格式轉換' },
+  { id: 'security', name: '安全加密' }
 ];
 
 const makeIcon = (pathD, textBadge = null) => {
@@ -1091,6 +1341,18 @@ const tools = [
     actionText: '拆分 PDF →'
   },
   {
+    id: 'organize_pdf',
+    category: 'organize',
+    title: 'PDF 旋轉刪頁',
+    desc: '單頁旋轉 90°、刪除空白頁、調整前後頁序一氣呵成！',
+    badges: ['PDF'],
+    iconBg: 'bg-[#FF9F43]',
+    iconSvg: makeIcon('M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z'),
+    accept: '.pdf',
+    buttonText: '選擇 PDF 檔案',
+    actionText: '儲存整理結果 →'
+  },
+  {
     id: 'compress_pdf',
     category: 'optimize',
     title: 'PDF 極限壓縮',
@@ -1113,6 +1375,18 @@ const tools = [
     accept: '.jpg,.jpeg,.png,.webp,.bmp,.heic,.heif',
     buttonText: '選擇多張照片',
     actionText: '批次極限壓縮 →'
+  },
+  {
+    id: 'images_to_a4_pdf',
+    category: 'convert',
+    title: '照片排版 A4',
+    desc: '多張照片自動依每頁 1 / 2 / 4 張整齊排進 A4 PDF（限 20 張）。',
+    badges: ['JPG', 'PNG', 'HEIC'],
+    iconBg: 'bg-[#EE5253]',
+    iconSvg: makeIcon('M4 4h7v7H4V4zm9 0h7v7h-7V4zM4 13h7v7H4v-7zm9 0h7v7h-7v-7z'),
+    accept: '.jpg,.jpeg,.png,.webp,.bmp,.heic,.heif',
+    buttonText: '選擇多張照片',
+    actionText: '產生 A4 PDF →'
   },
   {
     id: 'heic_to_jpg',
@@ -1173,6 +1447,18 @@ const tools = [
     accept: '.jpg,.jpeg,.png',
     buttonText: '選擇多張圖片',
     actionText: '合併為 PDF →'
+  },
+  {
+    id: 'security_pdf',
+    category: 'security',
+    title: 'PDF 加密 / 解鎖',
+    desc: '幫重要 PDF 設定開啟密碼，或移除已知密碼的 PDF 限制。',
+    badges: ['PDF', 'AES-256'],
+    iconBg: 'bg-[#5F27CD]',
+    iconSvg: makeIcon('M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z'),
+    accept: '.pdf',
+    buttonText: '選擇 PDF 檔案',
+    actionText: '執行安全處理 →'
   }
 ];
 
@@ -1212,6 +1498,7 @@ const selectTool = (toolId) => {
   currentToolId.value = toolId;
   files.value = [];
   splitPages.value = [];
+  organizePages.value = [];
   selectedPages.value.clear();
   currentStep.value = 'workspace';
 };
@@ -1219,6 +1506,7 @@ const selectTool = (toolId) => {
 const goToHome = () => {
   files.value = [];
   splitPages.value = [];
+  organizePages.value = [];
   selectedPages.value.clear();
   currentStep.value = 'hub';
 };
@@ -1226,6 +1514,7 @@ const goToHome = () => {
 const clearWorkspace = () => {
   files.value = [];
   splitPages.value = [];
+  organizePages.value = [];
   selectedPages.value.clear();
 };
 
@@ -1267,6 +1556,14 @@ const executeTool = async () => {
     showToast('請至少勾選一頁或輸入拆分範圍！');
     return;
   }
+  if (currentToolId.value === 'organize_pdf' && organizePages.value.length === 0) {
+    showToast('請至少保留 1 頁 PDF！');
+    return;
+  }
+  if (currentToolId.value === 'security_pdf' && !securityParams.value.password.trim()) {
+    showToast('請輸入 PDF 密碼！');
+    return;
+  }
 
   isProcessing.value = true;
   progress.value = 25;
@@ -1282,6 +1579,15 @@ const executeTool = async () => {
     formData.append('split_mode', splitParams.value.mode);
     formData.append('ranges_str', splitParams.value.rangesStr);
     formData.append('chunk_size', splitParams.value.chunkSize);
+  } else if (currentToolId.value === 'organize_pdf') {
+    const ops = organizePages.value.map(p => ({ page: p.pageNum, rotate: p.rotate }));
+    formData.append('page_ops', JSON.stringify(ops));
+  } else if (currentToolId.value === 'security_pdf') {
+    formData.append('security_action', securityParams.value.action);
+    formData.append('pdf_password', securityParams.value.password);
+  } else if (currentToolId.value === 'images_to_a4_pdf') {
+    formData.append('a4_layout', a4Params.value.layout);
+    formData.append('a4_orientation', a4Params.value.orientation);
   } else if (currentToolId.value === 'compress_pdf') {
     formData.append('compress_preset', compressPdfParams.value.preset);
     formData.append('target_mb', compressPdfParams.value.targetMb);

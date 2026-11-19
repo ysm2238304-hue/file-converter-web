@@ -1,5 +1,6 @@
 import os
 import io
+import json
 import uuid
 import shutil
 import zipfile
@@ -25,7 +26,7 @@ from app.services.pdf_engine import (
 )
 from app.services.office_engine import pdf_to_word_converter, word_to_pdf_libreoffice
 
-app = FastAPI(title="DocuMorph API", version="2.3")
+app = FastAPI(title="DocuMorph API", version="2.4")
 
 app.add_middleware(
     CORSMiddleware,
@@ -211,6 +212,139 @@ def convert_heic_to_jpg(input_path: str, output_dir: str, quality: int = 92) -> 
     return out_path
 
 
+def organize_pdf_pages(input_path: str, output_path: str, page_ops_json: str):
+    """依使用者指定的頁序與旋轉角度重組 PDF（未包含的頁面即視為刪除）"""
+    try:
+        ops = json.loads(page_ops_json or "[]")
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="頁面操作參數格式錯誤")
+
+    if not isinstance(ops, list) or len(ops) == 0:
+        raise HTTPException(status_code=400, detail="請至少保留一頁 PDF")
+
+    src_doc = fitz.open(input_path)
+    out_doc = fitz.open()
+    try:
+        total = len(src_doc)
+        for item in ops:
+            p_num = int(item.get("page", 0))
+            rot = int(item.get("rotate", 0)) % 360
+            p_idx = p_num - 1
+            if 0 <= p_idx < total:
+                out_doc.insert_pdf(src_doc, from_page=p_idx, to_page=p_idx)
+                if rot != 0:
+                    page = out_doc[-1]
+                    page.set_rotation((page.rotation + rot) % 360)
+
+        if len(out_doc) == 0:
+            raise HTTPException(status_code=400, detail="沒有有效的頁面可輸出")
+
+        out_doc.save(output_path, garbage=4, deflate=True)
+    finally:
+        out_doc.close()
+        src_doc.close()
+
+
+def protect_or_unlock_pdf(input_path: str, output_path: str, action: str, password: str):
+    """使用 PyMuPDF 進行 AES-256 加密或解除密碼"""
+    pw = (password or "").strip()
+    if not pw:
+        raise HTTPException(status_code=400, detail="請輸入 PDF 密碼")
+
+    doc = fitz.open(input_path)
+    try:
+        if action == "encrypt":
+            if doc.needs_pass:
+                raise HTTPException(status_code=400, detail="此 PDF 已有密碼保護，請先解除密碼後再重新加密")
+            doc.save(
+                output_path,
+                encryption=fitz.PDF_ENCRYPT_AES_256,
+                user_pw=pw,
+                owner_pw=pw,
+                garbage=4,
+                deflate=True,
+            )
+        elif action == "unlock":
+            if doc.needs_pass:
+                if not doc.authenticate(pw):
+                    raise HTTPException(status_code=400, detail="密碼錯誤，無法解除保護")
+            doc.save(
+                output_path,
+                encryption=fitz.PDF_ENCRYPT_NONE,
+                garbage=4,
+                deflate=True,
+            )
+        else:
+            raise HTTPException(status_code=400, detail="不支援的安全操作模式")
+    finally:
+        doc.close()
+
+
+def images_to_a4_pdf(
+    image_paths: List[str],
+    output_path: str,
+    layout: str = "2_up",
+    orientation: str = "portrait",
+):
+    """將多張照片（含 HEIC）自動等比例置中排版進標準 A4 PDF"""
+    if orientation == "landscape":
+        page_w, page_h = 841.89, 595.28
+    else:
+        page_w, page_h = 595.28, 841.89
+
+    if layout == "1_up":
+        cols, rows = 1, 1
+    elif layout == "4_up":
+        cols, rows = 2, 2
+    else:
+        cols, rows = (2, 1) if orientation == "landscape" else (1, 2)
+
+    per_page = cols * rows
+    margin = 24.0
+    gap = 14.0
+    cell_w = (page_w - 2 * margin - (cols - 1) * gap) / cols
+    cell_h = (page_h - 2 * margin - (rows - 1) * gap) / rows
+
+    doc = fitz.open()
+    try:
+        current_page = None
+        for idx, img_path in enumerate(image_paths):
+            slot = idx % per_page
+            if slot == 0:
+                current_page = doc.new_page(width=page_w, height=page_h)
+
+            col = slot % cols
+            row = slot // cols
+            x0 = margin + col * (cell_w + gap)
+            y0 = margin + row * (cell_h + gap)
+
+            with Image.open(img_path) as raw_img:
+                img = _prepare_rgb_image(raw_img)
+                w, h = img.size
+                if max(w, h) > 1600:
+                    scale = 1600.0 / float(max(w, h))
+                    img = img.resize((int(w * scale), int(h * scale)), Image.Resampling.LANCZOS)
+                    w, h = img.size
+
+                buf = io.BytesIO()
+                img.save(buf, format="JPEG", quality=88, optimize=True, progressive=True)
+                img.close()
+                img_bytes = buf.getvalue()
+
+            # 計算等比例置中矩形
+            ratio = min(cell_w / float(w), cell_h / float(h))
+            draw_w = w * ratio
+            draw_h = h * ratio
+            rx0 = x0 + (cell_w - draw_w) / 2.0
+            ry0 = y0 + (cell_h - draw_h) / 2.0
+            rect = fitz.Rect(rx0, ry0, rx0 + draw_w, ry0 + draw_h)
+            current_page.insert_image(rect, stream=img_bytes)
+
+        doc.save(output_path, garbage=4, deflate=True)
+    finally:
+        doc.close()
+
+
 # ======================== API 端點 ========================
 @app.post("/api/info/pdf")
 async def inspect_pdf(file: UploadFile = File(...)):
@@ -247,11 +381,17 @@ async def execute_conversion(
     max_dimension: Optional[int] = Form(1024),
     out_format: Optional[str] = Form("JPEG"),
     heic_quality: Optional[int] = Form(92),
+    # 旋轉刪頁整理 / 安全加密 / 照片排 A4 參數
+    page_ops: Optional[str] = Form("[]"),
+    security_action: Optional[str] = Form("encrypt"),
+    pdf_password: Optional[str] = Form(""),
+    a4_layout: Optional[str] = Form("2_up"),
+    a4_orientation: Optional[str] = Form("portrait"),
 ):
     """核心轉檔與壓縮端點"""
     background_tasks.add_task(clean_expired_tasks, BASE_UPLOAD_DIR)
 
-    is_image_batch = mode in ("compress_images", "heic_to_jpg")
+    is_image_batch = mode in ("compress_images", "heic_to_jpg", "images_to_a4_pdf")
     if is_image_batch and len(files) > MAX_IMAGE_BATCH_COUNT:
         raise HTTPException(
             status_code=400,
@@ -296,6 +436,29 @@ async def execute_conversion(
                 saved_files[0], output_dir, mode=split_mode, ranges_str=ranges_str, chunk_size=chunk_size
             )
             output_files.extend(out_list)
+
+        elif mode == "organize_pdf":
+            base = os.path.splitext(os.path.basename(saved_files[0]))[0]
+            out_pdf = os.path.join(output_dir, f"{base}_整理完成.pdf")
+            organize_pdf_pages(saved_files[0], out_pdf, page_ops)
+            output_files.append(out_pdf)
+
+        elif mode == "security_pdf":
+            base = os.path.splitext(os.path.basename(saved_files[0]))[0]
+            suffix = "已加密" if security_action == "encrypt" else "已解鎖"
+            out_pdf = os.path.join(output_dir, f"{base}_{suffix}.pdf")
+            protect_or_unlock_pdf(saved_files[0], out_pdf, security_action, pdf_password)
+            output_files.append(out_pdf)
+
+        elif mode == "images_to_a4_pdf":
+            out_pdf = os.path.join(output_dir, "照片排版A4報告.pdf")
+            images_to_a4_pdf(
+                saved_files,
+                out_pdf,
+                layout=a4_layout,
+                orientation=a4_orientation,
+            )
+            output_files.append(out_pdf)
 
         elif mode == "compress_pdf":
             for f in saved_files:

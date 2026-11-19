@@ -25,7 +25,7 @@ from app.services.pdf_engine import (
 )
 from app.services.office_engine import pdf_to_word_converter, word_to_pdf_libreoffice
 
-app = FastAPI(title="DocuMorph API", version="2.2")
+app = FastAPI(title="DocuMorph API", version="2.3")
 
 app.add_middleware(
     CORSMiddleware,
@@ -364,18 +364,24 @@ async def execute_conversion(
 
     if len(output_files) == 1:
         download_name = os.path.basename(output_files[0])
+        final_path = output_files[0]
     else:
         zip_path = os.path.join(task_dir, "轉換成果打包.zip")
         with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as z:
             for f in output_files:
                 z.write(f, arcname=os.path.basename(f))
         download_name = "轉換成果打包.zip"
+        final_path = zip_path
+
+    output_bytes = os.path.getsize(final_path) if os.path.exists(final_path) else 0
 
     return {
         "status": "success",
         "task_id": task_id,
         "filename": download_name,
         "download_url": f"/api/download/{task_id}?filename={download_name}",
+        "original_bytes": total_bytes,
+        "output_bytes": output_bytes,
     }
 
 
